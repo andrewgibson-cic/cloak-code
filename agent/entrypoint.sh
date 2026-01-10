@@ -1,0 +1,135 @@
+#!/bin/bash
+set -e
+
+echo "=========================================="
+echo "SafeClaude Agent Container Starting..."
+echo "=========================================="
+
+# Certificate installation function
+install_certificate() {
+    local cert_file="/certs/mitmproxy-ca-cert.pem"
+    local cert_dest="/usr/local/share/ca-certificates/mitmproxy-ca-cert.crt"
+    local timeout=30
+    local elapsed=0
+    
+    echo "Waiting for proxy certificate..."
+    
+    # Wait for certificate file to exist
+    while [ ! -f "$cert_file" ]; do
+        if [ $elapsed -ge $timeout ]; then
+            echo "ERROR: Timeout waiting for certificate after ${timeout}s"
+            echo "The proxy container may not be running or certificate generation failed."
+            exit 1
+        fi
+        
+        echo "  Certificate not found yet... (${elapsed}s/${timeout}s)"
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    
+    echo "✓ Certificate found: $cert_file"
+    
+    # Copy certificate (needs sudo)
+    echo "Installing certificate..."
+    sudo cp "$cert_file" "$cert_dest"
+    
+    # Update CA certificates (needs sudo)
+    echo "Updating CA certificate store..."
+    sudo update-ca-certificates
+    
+    echo "✓ Certificate installed successfully"
+    
+    # Verify the certificate is readable
+    if [ -f "$cert_dest" ]; then
+        echo "✓ Certificate verified at: $cert_dest"
+    else
+        echo "WARNING: Certificate not found after installation"
+    fi
+}
+
+# Verify proxy connectivity
+verify_proxy() {
+    echo "Verifying proxy connectivity..."
+    
+    # Check if proxy is reachable
+    if curl -s --proxy "$HTTP_PROXY" --max-time 5 http://proxy:8080 > /dev/null 2>&1; then
+        echo "✓ Proxy is reachable at $HTTP_PROXY"
+    else
+        echo "WARNING: Unable to reach proxy at $HTTP_PROXY"
+        echo "This may cause network issues."
+    fi
+}
+
+# Display environment information
+display_environment() {
+    echo ""
+    echo "=========================================="
+    echo "Environment Configuration:"
+    echo "=========================================="
+    echo "User: $(whoami)"
+    echo "Home: $HOME"
+    echo "Working Directory: $(pwd)"
+    echo "Node Version: $(node --version)"
+    echo "NPM Version: $(npm --version)"
+    echo "Python Version: $(python3 --version)"
+    echo "Proxy: $HTTP_PROXY"
+    echo ""
+    echo "Dummy Credentials (for reference):"
+    echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:0:20}..."
+    echo "  GITHUB_TOKEN: ${GITHUB_TOKEN:0:20}..."
+    echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:0:20}..."
+    echo ""
+    echo "Note: These are DUMMY tokens. Real credentials"
+    echo "are injected by the proxy on-the-fly."
+    echo "=========================================="
+    echo ""
+}
+
+# Create workspace if it doesn't exist
+setup_workspace() {
+    if [ ! -d "$HOME/workspace" ]; then
+        echo "Creating workspace directory..."
+        mkdir -p "$HOME/workspace"
+    fi
+    
+    echo "✓ Workspace ready at: $HOME/workspace"
+}
+
+# Main initialization sequence
+main() {
+    # Install certificate (critical for HTTPS)
+    install_certificate
+    
+    # Setup workspace
+    setup_workspace
+    
+    # Verify proxy
+    verify_proxy
+    
+    # Display environment
+    display_environment
+    
+    echo "=========================================="
+    echo "SafeClaude Agent Ready!"
+    echo "=========================================="
+    echo ""
+    echo "Quick Start Guide:"
+    echo "  1. Navigate to workspace: cd workspace"
+    echo "  2. Run Claude: claude 'your task here'"
+    echo "  3. Or enter interactive mode: claude"
+    echo ""
+    echo "Security Notes:"
+    echo "  - All API calls are routed through the proxy"
+    echo "  - Real credentials are never stored in this container"
+    echo "  - This container can be safely reset at any time"
+    echo ""
+    echo "For help, run: claude --help"
+    echo "=========================================="
+    echo ""
+    
+    # Execute the command passed to the container
+    exec "$@"
+}
+
+# Run main function
+main "$@"

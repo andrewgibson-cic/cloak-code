@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # Secure Proxy - The "Keyring" that holds real credentials
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: safeclaude_proxy
+    hostname: proxy
+    networks:
+      - safeclaude_internal
+    ports:
+      # Expose proxy port for debugging (optional, can be removed in production)
+      - "8080:8080"
+    volumes:
+      # Mount the .env file containing REAL credentials
+      # CRITICAL: This file must NEVER be mounted to the agent container
+      - ./.env:/app/.env:ro
+      # Shared certificate volume for MITM trust
+      - certs:/certs
+    env_file:
+      # Load real credentials from .env file
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mitmdump", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      # Run with default Docker security
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Agent Container - The "Untrusted" AI workspace
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: safeclaude_agent
+    hostname: agent
+    networks:
+      - safeclaude_internal
+    volumes:
+      # Persistent authentication state (OAuth tokens)
+      - claude_auth_data:/home/claude/.config/claude-code
+      # Shared certificates for trusting the proxy
+      - certs:/certs:ro
+      # Bind mount the workspace (project code)
+      # WARNING: Only mount the specific project directory, NOT your entire home folder
+      - ./workspace:/home/claude/workspace
+    environment:
+      # Proxy configuration
+      HTTP_PROXY: "http://proxy:8080"
+      HTTPS_PROXY: "http://proxy:8080"
+      NO_PROXY: "localhost,127.0.0.1"
+      
+      # Node.js certificate trust
+      NODE_EXTRA_CA_CERTS: "/usr/local/share/ca-certificates/mitmproxy-ca-cert.pem"
+      
+      # Python certificate trust
+      REQUESTS_CA_BUNDLE: "/etc/ssl/certs/ca-certificates.crt"
+      SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
+      
+      # DUMMY credentials (will be replaced by proxy)
+      OPENAI_API_KEY: "DUMMY_OPENAI_KEY"
+      GITHUB_TOKEN: "DUMMY_GITHUB_TOKEN"
+      ANTHROPIC_API_KEY: "DUMMY_ANTHROPIC_KEY"
+      AWS_ACCESS_KEY_ID: "DUMMY_AWS_ACCESS_KEY"
+      AWS_SECRET_ACCESS_KEY: "DUMMY_AWS_SECRET_KEY"
+    depends_on:
+      proxy:
+        condition: service_healthy
+    stdin_open: true  # Enable interactive mode
+    tty: true         # Allocate a pseudo-TTY
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits (optional but recommended)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  safeclaude_internal:
+    driver: bridge
+    internal: false  # Allow external access through proxy
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  # Persistent storage for Claude authentication tokens
+  claude_auth_data:
+    driver: local
+  
+  # Shared volume for proxy-generated certificates
+  certs:
+    driver: local
