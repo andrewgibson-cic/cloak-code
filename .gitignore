@@ -1,0 +1,35 @@
+# Environment files with secrets
+.env
+.env.vault
+.env.local
+.env.*.local
+sidecar.json
+
+# Binaries
+env-sidecar
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+
+# Test coverage
+*.out
+coverage.html

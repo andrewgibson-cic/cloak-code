@@ -1,0 +1,19 @@
+{
+  "port": 8888,
+  "env_file": ".env.vault",
+  "routes": {
+    "/openai": {
+      "target": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer ${OPENAI_API_KEY}",
+        "Organization": "${OPENAI_ORG_ID}"
+      }
+    },
+    "/stripe": {
+      "target": "https://api.stripe.com/v1",
+      "headers": {
+        "Authorization": "Bearer ${STRIPE_SECRET_KEY}"
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "Env-Sidecar Dev",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  },
+  "runArgs": [
+    "--gpus", "all",
+    "--shm-size=8g",
+    "--env-file", ".devcontainer/.env",
+    "--network", "sidecar-network"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "Anthropic.claude-code",
+        "golang.Go"
+      ]
+    }
+  },
+  "mounts": [
+    // UPDATED: Point to /home/vscode instead of /root
+    "source=claude-config,target=/home/vscode/.config/claude,type=volume",
+    "source=hf-cache,target=/home/vscode/.cache/huggingface,type=volume",
+    "source=project-bashhistory,target=/home/vscode/commandhistory,type=volume"
+  ],
+  // OVERRIDE: Ensure Claude knows where to look, regardless of your local .env
+  "remoteEnv": {
+    "HISTFILE": "/home/vscode/commandhistory/.bash_history",
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.config/claude"
+  }
+}
