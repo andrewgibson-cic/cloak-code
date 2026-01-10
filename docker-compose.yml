@@ -17,6 +17,8 @@ services:
       # Mount the .env file containing REAL credentials
       # CRITICAL: This file must NEVER be mounted to the agent container
       - ./.env:/app/.env:ro
+      # Mount credentials configuration file
+      - ./credentials.yml:/app/credentials.yml:ro
       # Shared certificate volume for MITM trust
       - certs:/certs
     env_file:
