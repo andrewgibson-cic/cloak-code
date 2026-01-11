@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -15,8 +13,8 @@ func main() {
 	// CLI flags
 	configPath := flag.String("config", "sidecar.json", "Path to the sidecar configuration file")
 	port := flag.Int("port", 0, "Port to listen on (overrides config file)")
-	unsafe := flag.Bool("unsafe", false, "Allow binding to 0.0.0.0 (unsafe, not recommended)")
 	verbose := flag.Bool("verbose", false, "Enable verbose debug logging")
+	generateCA := flag.Bool("generate-ca", false, "Generate CA certificate and exit")
 	flag.Parse()
 
 	// Load configuration
@@ -30,6 +28,19 @@ func main() {
 		config.Port = *port
 	}
 
+	// Set default port if not specified
+	if config.Port == 0 {
+		config.Port = 8080
+	}
+
+	// Set default CA paths if not specified
+	if config.CA.CertPath == "" {
+		config.CA.CertPath = "certs/ca.crt"
+	}
+	if config.CA.CAKeyPath == "" {
+		config.CA.CAKeyPath = "certs/ca.key"
+	}
+
 	// Load environment variables
 	env, err := LoadEnvFile(config.EnvFile)
 	if err != nil {
@@ -39,148 +50,105 @@ func main() {
 		log.Printf("Loaded %d environment variables from %s", len(env), config.EnvFile)
 	}
 
+	// Generate CA certificate if requested
+	if *generateCA {
+		certDir := "certs"
+		if err := os.MkdirAll(certDir, 0755); err != nil {
+			log.Fatalf("Failed to create certs directory: %v", err)
+		}
+		if err := GenerateCA(config.CA.CertPath, config.CA.CAKeyPath); err != nil {
+			log.Fatalf("Failed to generate CA: %v", err)
+		}
+		return
+	}
+
+	// Ensure CA certificate exists
+	if err := ensureCAExists(config); err != nil {
+		log.Fatalf("CA certificate error: %v", err)
+	}
+
+	// Load CA certificate
+	caCertBytes, caKeyBytes, err := LoadCACert(config.CA.CertPath, config.CA.CAKeyPath)
+	if err != nil {
+		log.Fatalf("Failed to load CA certificate: %v", err)
+	}
+
 	// Create proxy server
 	proxyServer := &ProxyServer{
 		config:  config,
 		env:     env,
-		routes:  make(map[string]*ProxyRoute),
 		verbose: *verbose,
 	}
 
-	// Expand and prepare routes
-	for path, route := range config.Routes {
-		expandedHeaders := make(map[string]string)
-		for key, value := range route.Headers {
-			expandedValue := ExpandVariables(value, env)
-			expandedHeaders[key] = expandedValue
-
-			// Debug: Log whether variable expansion succeeded (without exposing values)
-			if *verbose && strings.Contains(value, "${") {
-				if expandedValue == "" {
-					log.Printf("WARNING: Route %s header %s: variable expansion FAILED for template '%s'", path, key, value)
-				} else {
-					log.Printf("Route %s header %s: variable expanded successfully from template '%s'", path, key, value)
-				}
-			}
-		}
-
-		// Build replace_values map (env var name -> real value)
-		replaceValues := make(map[string]string)
-		for _, envVarName := range route.ReplaceValues {
-			if realValue, exists := env[envVarName]; exists {
-				replaceValues[envVarName] = realValue
-				if *verbose {
-					log.Printf("Route %s: replace_values loaded for %s", path, envVarName)
-				}
-			} else {
-				log.Printf("WARNING: Route %s: replace_values specifies '%s' but not found in env file", path, envVarName)
-			}
-		}
-
-		proxyServer.routes[path] = &ProxyRoute{
-			Target:        route.Target,
-			Headers:       expandedHeaders,
-			ReplaceValues: replaceValues,
-		}
-	}
-
-	// Setup HTTP handler
-	http.HandleFunc("/", proxyServer.handleRequest)
-
-	// Determine bind address
-	bindAddr := "127.0.0.1"
-	if *unsafe {
-		bindAddr = "0.0.0.0"
-	}
-
 	// Print startup banner
-	printBanner(bindAddr, config.Port, proxyServer.routes, isWSL2())
+	printBanner(config, *verbose)
 
-	// Start server
-	addr := fmt.Sprintf("%s:%d", bindAddr, config.Port)
-	log.Printf("Starting server on %s", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	// Start the transparent proxy
+	log.Printf("Starting transparent proxy on port %d", config.Port)
+	if err := proxyServer.StartTransparentProxy(caCertBytes, caKeyBytes); err != nil {
+		log.Fatalf("Proxy failed: %v", err)
 	}
 }
 
-func printBanner(bindAddr string, port int, routes map[string]*ProxyRoute, wslIP string) {
-	fmt.Printf("🛡️  env-sidecar running on %s:%d\n", bindAddr, port)
-	fmt.Println(strings.Repeat("-", 40))
-
-	if len(routes) > 0 {
-		fmt.Println("Proxy Maps:")
-
-		// Sort routes for consistent output
-		var routePaths []string
-		for path := range routes {
-			routePaths = append(routePaths, path)
+func ensureCAExists(config *Config) error {
+	// Check if CA certificate exists
+	if _, err := os.Stat(config.CA.CertPath); os.IsNotExist(err) {
+		// Create certs directory
+		certDir := "certs"
+		if err := os.MkdirAll(certDir, 0755); err != nil {
+			return fmt.Errorf("failed to create certs directory: %w", err)
 		}
-		sort.Strings(routePaths)
 
-		for _, path := range routePaths {
-			route := routes[path]
-			fmt.Printf("  %s  -> %s\n", path, route.Target)
+		// Generate CA certificate
+		log.Println("CA certificate not found, generating new one...")
+		if err := GenerateCA(config.CA.CertPath, config.CA.CAKeyPath); err != nil {
+			return fmt.Errorf("failed to generate CA: %w", err)
+		}
+	}
+	return nil
+}
+
+func printBanner(config *Config, verbose bool) {
+	fmt.Printf("🛡️  env-sidecar transparent proxy running on :%d\n", config.Port)
+	fmt.Println(strings.Repeat("-", 50))
+
+	if len(config.Domains) > 0 {
+		fmt.Println("Domain Rules:")
+
+		// Sort domains for consistent output
+		var domains []string
+		for domain := range config.Domains {
+			domains = append(domains, domain)
+		}
+		sort.Strings(domains)
+
+		for _, domain := range domains {
+			rule := config.Domains[domain]
+			var headers []string
+			for header := range rule.InjectHeaders {
+				headers = append(headers, header)
+			}
+			sort.Strings(headers)
+			fmt.Printf("  %s\n", domain)
+			for _, header := range headers {
+				// Show template without exposing values
+				template := rule.InjectHeaders[header]
+				if verbose {
+					fmt.Printf("    → %s: %s\n", header, template)
+				} else {
+					fmt.Printf("    → %s: ***\n", header)
+				}
+			}
 		}
 		fmt.Println()
 	}
 
-	// Extract unique base URLs for AI instructions
-	fmt.Println("👉 Instructions for AI:")
-	var baseURLs []string
-	seenTargets := make(map[string]bool)
-
-	// Add localhost URL (for local access)
-	for path, route := range routes {
-		target := route.Target
-		if !seenTargets[target] {
-			baseURLs = append(baseURLs, fmt.Sprintf("Set your Base URL to http://127.0.0.1:%d%s", port, path))
-			seenTargets[target] = true
-		}
-	}
-
-	// If running in WSL2 with 0.0.0.0, also show WSL IP and host.docker.internal
-	if wslIP != "" && bindAddr == "0.0.0.0" {
-		for path := range routes {
-			baseURLs = append(baseURLs, fmt.Sprintf("  (from Docker): http://host.docker.internal:%d%s", port, path))
-			baseURLs = append(baseURLs, fmt.Sprintf("  (from Docker): http://%s:%d%s", wslIP, port, path))
-			break // Only show once
-		}
-	}
-
-	for _, instruction := range baseURLs {
-		fmt.Printf("  \"%s\"\n", instruction)
-	}
+	fmt.Println("📡 Transparent Proxy Mode:")
+	fmt.Println("   Configure your client to use HTTP proxy:")
+	fmt.Printf("   http://127.0.0.1:%d\n", config.Port)
 	fmt.Println()
-}
-
-// isWSL2 detects if running in WSL2 and returns the WSL2 IP address
-func isWSL2() string {
-	// Check for WSL2 indicator file
-	if _, err := os.Stat("/proc/version"); err == nil {
-		content, err := os.ReadFile("/proc/version")
-		if err == nil && strings.Contains(string(content), "microsoft") {
-			// Get WSL2 IP address
-			interfaces, err := net.Interfaces()
-			if err != nil {
-				return ""
-			}
-			for _, iface := range interfaces {
-				if iface.Name == "eth0" {
-					addrs, err := iface.Addrs()
-					if err != nil {
-						continue
-					}
-					for _, addr := range addrs {
-						if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-							if ipnet.IP.To4() != nil {
-								return ipnet.IP.String()
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	return ""
+	fmt.Println("🔒 CA Certificate:")
+	fmt.Printf("   Location: %s\n", config.CA.CertPath)
+	fmt.Println("   To install in client: curl http://mitm.it/cert/pem")
+	fmt.Println()
 }
