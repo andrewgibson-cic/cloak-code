@@ -2,6 +2,39 @@
 
 A secure, containerized development environment for AI agents implementing a "zero-knowledge" credential management model where the agent never has access to real API keys.
 
+## ✨ NEW: Universal Credential Support
+
+**SafeClaude now supports ANY API credential!** 🎉
+
+Add credentials for **Binance, eBay, Shopify, Stripe, Slack, Discord, or literally any API** without touching code:
+
+- ✅ **No code changes** - Just edit `credentials.yml`
+- ✅ **No rebuilds** - Changes take effect on restart
+- ✅ **Interactive wizard** - Run `./scripts/add-credential.sh`
+- ✅ **View status** - Run `./scripts/list-credentials.sh`
+
+**Example:** Add Binance API in 3 steps:
+```bash
+# 1. Add to credentials.yml
+binance:
+  display_name: "Binance API"
+  dummy_token: "DUMMY_BINANCE_KEY"
+  env_var: "REAL_BINANCE_API_KEY"
+  header_locations:
+    - name: "X-MBX-APIKEY"
+      format: "{token}"
+  allowed_hosts:
+    - "api.binance.com"
+    
+# 2. Add to .env
+REAL_BINANCE_API_KEY=your-actual-key
+
+# 3. Restart
+docker-compose restart proxy
+```
+
+📖 **[Full Guide: Adding New Credentials →](./docs/ADDING_CREDENTIALS.md)**
+
 ## 🔒 Security Architecture
 
 SafeClaude uses a **sidecar proxy pattern** to inject credentials on-the-fly:
