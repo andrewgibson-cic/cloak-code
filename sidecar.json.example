@@ -1,14 +1,16 @@
 {
   "port": 8888,
   "env_file": ".env.vault",
-  "routes": {
-    "/openai": {
-      "target": "https://api.openai.com/v1",
-      "replace_values": ["OPENAI_API_KEY", "OPENAI_ORG_ID"]
+  "ca": {
+    "cert_path": "certs/ca.crt",
+    "key_path": "certs/ca.key"
+  },
+  "domains": {
+    "api.anthropic.com": {
+      "replace_values": ["ANTHROPIC_AUTH_TOKEN"]
     },
-    "/stripe": {
-      "target": "https://api.stripe.com/v1",
-      "replace_values": ["STRIPE_SECRET_KEY"]
+    "huggingface.co": {
+      "replace_values": ["HF_TOKEN"]
     }
   }
 }

@@ -22,12 +22,20 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Set default port if not specified
 	if config.Port == 0 {
-		config.Port = 8888
+		config.Port = 8080
 	}
 
 	// Set default env file if not specified
 	if config.EnvFile == "" {
 		config.EnvFile = ".env.vault"
+	}
+
+	// Set default CA paths if not specified
+	if config.CA.CertPath == "" {
+		config.CA.CertPath = "certs/ca.crt"
+	}
+	if config.CA.CAKeyPath == "" {
+		config.CA.CAKeyPath = "certs/ca.key"
 	}
 
 	return &config, nil
@@ -85,13 +93,4 @@ func ExpandVariables(input string, env map[string]string) string {
 		// If variable not found, return empty string (or could return the original)
 		return ""
 	})
-}
-
-// ExpandRouteHeaders expands all headers in a route using environment variables
-func (ps *ProxyServer) expandRouteHeaders(route *Route) map[string]string {
-	expanded := make(map[string]string)
-	for key, value := range route.Headers {
-		expanded[key] = ExpandVariables(value, ps.env)
-	}
-	return expanded
 }

@@ -1,5 +1,5 @@
 {
-  "name": "Env-Sidecar Dev",
+  "name": "Env-Sidecar Dev (Transparent Proxy)",
   "build": {
     "dockerfile": "../Dockerfile"
   },
@@ -9,6 +9,11 @@
     "--env-file", ".devcontainer/.env",
     "--network", "sidecar-network"
   ],
+  "containerEnv": {
+    "http_proxy": "http://env-sidecar:8888",
+    "https_proxy": "http://env-sidecar:8888",
+    "no_proxy": "localhost,127.0.0.1,env-sidecar"
+  },
   "customizations": {
     "vscode": {
       "settings": {
@@ -25,14 +30,13 @@
     }
   },
   "mounts": [
-    // UPDATED: Point to /home/vscode instead of /root
     "source=claude-config,target=/home/vscode/.config/claude,type=volume",
     "source=hf-cache,target=/home/vscode/.cache/huggingface,type=volume",
     "source=project-bashhistory,target=/home/vscode/commandhistory,type=volume"
   ],
-  // OVERRIDE: Ensure Claude knows where to look, regardless of your local .env
   "remoteEnv": {
     "HISTFILE": "/home/vscode/commandhistory/.bash_history",
     "CLAUDE_CONFIG_DIR": "/home/vscode/.config/claude"
-  }
+  },
+  "postCreateCommand": "bash .devcontainer/setup-cert.sh"
 }
