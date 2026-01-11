@@ -1,0 +1,19 @@
+services:
+  env-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    container_name: env-sidecar
+    ports:
+      - "8888:8888"
+    volumes:
+      # Mount config files so you can update without rebuilding
+      - ./sidecar.json:/etc/sidecar/sidecar.json:ro
+      - ./.env.vault:/etc/sidecar/.env.vault:ro
+    restart: unless-stopped
+    networks:
+      - sidecar-network
+
+networks:
+  sidecar-network:
+    driver: bridge
