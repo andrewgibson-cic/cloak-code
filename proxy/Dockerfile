@@ -1,21 +1,30 @@
-# SafeClaude Proxy Container
+# Universal API Credential Injector - Proxy Container
 # Based on mitmproxy for credential injection and traffic inspection
+# v2.0 - Strategy-based architecture with AWS SigV4 support
 
 FROM mitmproxy/mitmproxy:10.1.1
 
 # Install additional Python packages for enhanced functionality
 RUN pip install --no-cache-dir \
     python-dotenv==1.0.0 \
-    pyyaml==6.0.1
+    pyyaml==6.0.1 \
+    boto3==1.34.0 \
+    botocore==1.34.0
 
-# Create directory for proxy scripts
-RUN mkdir -p /scripts
+# Create directory for proxy scripts and strategies
+RUN mkdir -p /app/strategies
 
-# Copy the credential injection script
-COPY inject.py /scripts/inject.py
+# Copy strategy modules first (required by inject.py)
+COPY strategies/ /app/strategies/
+
+# Copy the main injection script
+COPY inject.py /app/inject.py
+
+# Copy example configuration
+COPY config.yaml.example /app/config.yaml.example
 
 # Make script executable
-RUN chmod +x /scripts/inject.py
+RUN chmod +x /app/inject.py
 
 # Create directory for certificates (shared with agent)
 RUN mkdir -p /certs
@@ -27,6 +36,9 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD mitmdump --version || exit 1
 
+# Set working directory
+WORKDIR /app
+
 # Run mitmproxy with the injection script
 # --set block_global=false: Allow all traffic (we filter in script)
 # --set ssl_insecure=true: Accept upstream SSL certs (for dev/testing)
@@ -37,4 +49,4 @@ CMD ["mitmdump", \
      "--set", "block_global=false", \
      "--listen-host", "0.0.0.0", \
      "--listen-port", "8080", \
-     "-s", "/scripts/inject.py"]
+     "-s", "/app/inject.py"]

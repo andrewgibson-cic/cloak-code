@@ -1,468 +1,460 @@
 #!/usr/bin/env python3
 """
-SafeClaude Universal Credential Injection Proxy Script
+Universal API Credential Injector - v2.0
 
-This script runs as a mitmproxy addon to intercept HTTP/HTTPS requests
-from the agent container and inject real API credentials in place of
-dummy tokens, while enforcing strict host whitelisting for security.
+This is a complete rewrite of the credential injection system using a modular
+strategy architecture. It supports multiple authentication protocols including:
+- AWS Signature Version 4 (SigV4)
+- Bearer tokens (Stripe, OpenAI, GitHub)
+- HMAC signing (Binance, crypto exchanges)
 
-NOW WITH DYNAMIC CONFIGURATION SUPPORT - Add new credentials in credentials.yml!
+Features:
+- Dynamic configuration via config.yaml
+- Pluggable strategy architecture
+- Backward compatibility with v1 (fallback mode)
+- Enhanced security validation
+- Comprehensive logging
 
-Security Features:
-- Zero-knowledge: Agent never sees real credentials
-- Host whitelisting: Credentials only injected for approved destinations
-- No credential logging: Real tokens never written to logs
-- Request blocking: Unauthorized destinations receive 403 responses
-- Dynamic configuration: No code changes needed to add new services
+Architecture:
+- Each authentication protocol is implemented as a Strategy class
+- Rules in config.yaml determine which strategy applies to each request
+- Strategies are evaluated in priority order
+- Fail-closed by default for security
 """
 
 import os
 import sys
 import yaml
-from typing import Dict, List, Optional
-from dataclasses import dataclass, field
+import re
+import logging
+from typing import Dict, List, Optional, Any
+from pathlib import Path
+
 from mitmproxy import http, ctx
 from mitmproxy.script import concurrent
 
+# Import strategy classes
+try:
+    from strategies import (
+        InjectionStrategy,
+        BearerStrategy,
+        StripeStrategy,
+        GitHubStrategy,
+        OpenAIStrategy,
+        AWSSigV4Strategy,
+    )
+    STRATEGIES_AVAILABLE = True
+except ImportError as e:
+    ctx.log.error(f"Failed to import strategies: {e}")
+    STRATEGIES_AVAILABLE = False
 
-@dataclass
-class CredentialConfig:
-    """Represents a single credential configuration."""
-    service_name: str
-    display_name: str
-    dummy_token: str
-    env_var: str
-    header_locations: List[Dict[str, str]] = field(default_factory=list)
-    query_param_names: List[str] = field(default_factory=list)
-    allowed_hosts: List[str] = field(default_factory=list)
-    docs_url: str = ""
-    requires_signature: bool = False
 
-
-class UniversalCredentialInjector:
+class UniversalInjector:
     """
-    Dynamically loads credential configurations from YAML
-    and injects them based on runtime rules.
+    Main orchestrator for the Universal API Credential Injector.
     
-    This replaces the old hardcoded DUMMY_TOKENS and HOST_WHITELIST
-    dictionaries with a flexible, configuration-driven approach.
+    Responsibilities:
+    - Load configuration from config.yaml
+    - Initialize strategy instances
+    - Match requests to appropriate strategies
+    - Handle telemetry blocking
+    - Provide backward compatibility
     """
+    
+    # Strategy type mapping
+    STRATEGY_CLASSES = {
+        "bearer": BearerStrategy,
+        "stripe": StripeStrategy,
+        "github": GitHubStrategy,
+        "openai": OpenAIStrategy,
+        "aws_sigv4": AWSSigV4Strategy,
+    }
     
     def __init__(self):
-        """Initialize the universal credential injector."""
-        self.credentials: Dict[str, CredentialConfig] = {}
-        self.dummy_to_service: Dict[str, str] = {}  # Quick lookup: dummy_token -> service_name
-        self.telemetry_blocklist: List[str] = []
-        self.unknown_host_policy: str = "block"
-        self.verbose_logging: bool = False
+        """Initialize the universal injector."""
+        self.strategies: List[InjectionStrategy] = []
+        self.rules: List[Dict[str, Any]] = []
+        self.telemetry_domains: List[str] = []
+        self.fail_mode: str = "closed"
+        self.block_telemetry: bool = True
         
+        # Statistics
         self.stats = {
             "requests_processed": 0,
             "credentials_injected": 0,
             "requests_blocked": 0,
             "telemetry_blocked": 0,
+            "strategy_errors": 0,
         }
         
-        # Load configuration and validate environment
-        self._load_config()
-        self._validate_environment()
-    
-    def _load_config(self):
-        """
-        Load credentials from YAML configuration file.
-        Falls back to legacy hardcoded values if config file not found.
-        """
-        config_path = os.environ.get(
-            'CREDENTIAL_CONFIG_PATH', 
-            '/app/credentials.yml'
-        )
+        # Configuration mode
+        self.config_mode: str = "unknown"  # v2, v1, or legacy
         
+        # Setup logging
+        self._setup_logging()
+        
+        # Load configuration
+        self._load_configuration()
+    
+    def _setup_logging(self):
+        """Configure logging based on environment."""
+        log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+        logging.basicConfig(
+            level=getattr(logging, log_level, logging.INFO),
+            format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        )
+        self.logger = logging.getLogger("UniversalInjector")
+    
+    def _load_configuration(self):
+        """
+        Load configuration in order of preference:
+        1. config.yaml (v2 format) - Strategy-based configuration
+        2. credentials.yml (v1 format) - Legacy credential list
+        3. Hardcoded defaults - Minimal backward compatibility
+        """
+        # Try v2 config first
+        config_path = Path("/app/config.yaml")
+        if not config_path.exists():
+            config_path = Path("proxy/config.yaml")
+        
+        if config_path.exists():
+            self._load_v2_config(config_path)
+            return
+        
+        # Try v1 config (credentials.yml)
+        v1_config_path = Path("/app/credentials.yml")
+        if not v1_config_path.exists():
+            v1_config_path = Path("credentials.yml")
+        
+        if v1_config_path.exists():
+            self._load_v1_config(v1_config_path)
+            return
+        
+        # Fall back to legacy hardcoded config
+        self._load_legacy_config()
+    
+    def _load_v2_config(self, config_path: Path):
+        """
+        Load v2 strategy-based configuration from config.yaml.
+        
+        Args:
+            config_path: Path to config.yaml file
+        """
         try:
             with open(config_path, 'r') as f:
                 config = yaml.safe_load(f)
             
-            # Parse credential definitions
-            for service_name, cred_data in config.get('credentials', {}).items():
-                cred = CredentialConfig(
-                    service_name=service_name,
-                    display_name=cred_data.get('display_name', service_name),
-                    dummy_token=cred_data['dummy_token'],
-                    env_var=cred_data['env_var'],
-                    header_locations=cred_data.get('header_locations', []),
-                    query_param_names=cred_data.get('query_param_names', []),
-                    allowed_hosts=cred_data.get('allowed_hosts', []),
-                    docs_url=cred_data.get('docs_url', ''),
-                    requires_signature=cred_data.get('requires_signature', False)
-                )
+            self.config_mode = "v2"
+            ctx.log.info(f"✓ Loading v2 configuration from {config_path}")
+            
+            # Load strategies
+            strategy_configs = config.get('strategies', [])
+            for strategy_config in strategy_configs:
+                strategy_name = strategy_config.get('name')
+                strategy_type = strategy_config.get('type')
+                strategy_params = strategy_config.get('config', {})
                 
-                self.credentials[service_name] = cred
-                self.dummy_to_service[cred.dummy_token] = service_name
+                # Get strategy class
+                strategy_class = self.STRATEGY_CLASSES.get(strategy_type)
+                if not strategy_class:
+                    ctx.log.warn(f"Unknown strategy type: {strategy_type}")
+                    continue
+                
+                try:
+                    # Instantiate strategy
+                    strategy = strategy_class(strategy_name, strategy_params)
+                    self.strategies.append(strategy)
+                    ctx.log.info(f"  ✓ Loaded strategy: {strategy_name} ({strategy_type})")
+                except Exception as e:
+                    ctx.log.error(f"  ✗ Failed to load strategy {strategy_name}: {e}")
             
-            # Load security settings
-            security = config.get('security', {})
-            self.telemetry_blocklist = security.get('telemetry_blocklist', [])
-            self.unknown_host_policy = security.get('unknown_host_policy', 'block')
-            self.verbose_logging = security.get('verbose_logging', False)
+            # Load rules
+            self.rules = config.get('rules', [])
+            # Sort by priority (higher priority first)
+            self.rules.sort(key=lambda r: r.get('priority', 0), reverse=True)
+            ctx.log.info(f"✓ Loaded {len(self.rules)} injection rules")
             
-            ctx.log.info(f"✓ Loaded {len(self.credentials)} credential configurations from {config_path}")
+            # Load settings
+            settings = config.get('settings', {})
+            self.fail_mode = settings.get('fail_mode', 'closed')
+            self.block_telemetry = settings.get('block_telemetry', True)
+            self.telemetry_domains = settings.get('telemetry_domains', [])
             
-            if self.verbose_logging:
-                ctx.log.info("Configured services:")
-                for service_name, cred in self.credentials.items():
-                    ctx.log.info(f"  - {cred.display_name} ({service_name})")
-            
-        except FileNotFoundError:
-            ctx.log.warn(
-                f"Configuration file not found: {config_path}. "
-                "Falling back to legacy hardcoded credentials."
+            ctx.log.info(
+                f"✓ Configuration loaded: {len(self.strategies)} strategies, "
+                f"{len(self.rules)} rules, fail_mode={self.fail_mode}"
             )
-            self._load_legacy_config()
             
         except Exception as e:
-            ctx.log.error(f"Failed to load credentials.yml: {e}")
-            ctx.log.warn("Falling back to legacy hardcoded credentials.")
+            ctx.log.error(f"Failed to load v2 configuration: {e}")
+            ctx.log.warn("Falling back to legacy configuration")
+            self._load_legacy_config()
+    
+    def _load_v1_config(self, config_path: Path):
+        """
+        Load v1 credentials.yml format and convert to strategies.
+        
+        This provides backward compatibility with the original SafeClaude format.
+        
+        Args:
+            config_path: Path to credentials.yml file
+        """
+        try:
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            self.config_mode = "v1"
+            ctx.log.info(f"✓ Loading v1 configuration from {config_path} (backward compatibility mode)")
+            
+            # Convert v1 credentials to Bearer strategies
+            credentials = config.get('credentials', {})
+            for service_name, cred_config in credentials.items():
+                # Create a Bearer strategy for each credential
+                strategy_config = {
+                    'token': cred_config.get('env_var'),
+                    'dummy_pattern': cred_config.get('dummy_token'),
+                    'allowed_hosts': cred_config.get('allowed_hosts', []),
+                }
+                
+                try:
+                    strategy = BearerStrategy(f"v1_{service_name}", strategy_config)
+                    self.strategies.append(strategy)
+                    ctx.log.info(f"  ✓ Converted v1 credential: {service_name}")
+                except Exception as e:
+                    ctx.log.error(f"  ✗ Failed to convert v1 credential {service_name}: {e}")
+            
+            # Load v1 security settings
+            security = config.get('security', {})
+            self.telemetry_domains = security.get('telemetry_blocklist', [])
+            self.block_telemetry = True
+            
+            ctx.log.info(f"✓ Converted {len(self.strategies)} v1 credentials to strategies")
+            
+        except Exception as e:
+            ctx.log.error(f"Failed to load v1 configuration: {e}")
+            ctx.log.warn("Falling back to legacy configuration")
             self._load_legacy_config()
     
     def _load_legacy_config(self):
         """
-        Fallback to legacy hardcoded configuration for backward compatibility.
-        This maintains support for systems without credentials.yml.
+        Load hardcoded legacy configuration for basic functionality.
+        
+        This is the last resort fallback for systems with no configuration files.
         """
-        legacy_credentials = {
-            'openai': CredentialConfig(
-                service_name='openai',
-                display_name='OpenAI API',
-                dummy_token='DUMMY_OPENAI_KEY',
-                env_var='REAL_OPENAI_API_KEY',
-                header_locations=[{'name': 'Authorization', 'format': 'Bearer {token}'}],
-                allowed_hosts=['api.openai.com', 'openai.com']
-            ),
-            'github': CredentialConfig(
-                service_name='github',
-                display_name='GitHub Token',
-                dummy_token='DUMMY_GITHUB_TOKEN',
-                env_var='REAL_GITHUB_TOKEN',
-                header_locations=[
-                    {'name': 'Authorization', 'format': 'token {token}'},
-                    {'name': 'X-GitHub-Token', 'format': '{token}'}
-                ],
-                allowed_hosts=['api.github.com', 'github.com', 'github.ibm.com', 'raw.githubusercontent.com']
-            ),
-            'anthropic': CredentialConfig(
-                service_name='anthropic',
-                display_name='Anthropic API',
-                dummy_token='DUMMY_ANTHROPIC_KEY',
-                env_var='REAL_ANTHROPIC_API_KEY',
-                header_locations=[{'name': 'x-api-key', 'format': '{token}'}],
-                allowed_hosts=['api.anthropic.com', 'anthropic.com']
-            ),
-            'aws_access': CredentialConfig(
-                service_name='aws_access',
-                display_name='AWS Access Key',
-                dummy_token='DUMMY_AWS_ACCESS_KEY',
-                env_var='REAL_AWS_ACCESS_KEY_ID',
-                header_locations=[{'name': 'Authorization', 'format': 'AWS4-HMAC-SHA256 Credential={token}'}],
-                allowed_hosts=['*.amazonaws.com', 'aws.amazon.com']
-            ),
-            'aws_secret': CredentialConfig(
-                service_name='aws_secret',
-                display_name='AWS Secret Key',
-                dummy_token='DUMMY_AWS_SECRET_KEY',
-                env_var='REAL_AWS_SECRET_ACCESS_KEY',
-                allowed_hosts=['*.amazonaws.com', 'aws.amazon.com']
-            ),
-        }
+        self.config_mode = "legacy"
+        ctx.log.warn("⚠ Using legacy hardcoded configuration (limited functionality)")
         
-        for service_name, cred in legacy_credentials.items():
-            self.credentials[service_name] = cred
-            self.dummy_to_service[cred.dummy_token] = service_name
-        
-        # Legacy telemetry blocklist
-        self.telemetry_blocklist = [
-            'telemetry.anthropic.com',
-            'analytics.anthropic.com',
-            'sentry.io',
-            'segment.com',
-            'mixpanel.com',
-            'amplitude.com',
-            'google-analytics.com',
-            'googletagmanager.com',
+        # Create basic Bearer strategies for common services
+        legacy_configs = [
+            {
+                'name': 'openai-legacy',
+                'type': 'openai',
+                'config': {'token': 'REAL_OPENAI_API_KEY'}
+            },
+            {
+                'name': 'github-legacy',
+                'type': 'github',
+                'config': {'token': 'REAL_GITHUB_TOKEN'}
+            },
         ]
         
-        ctx.log.info(f"✓ Loaded {len(self.credentials)} legacy credential configurations")
-    
-    def _validate_environment(self):
-        """
-        Validate that required environment variables are set.
-        Warns if credentials are missing but doesn't fail (allows partial setup).
-        """
-        missing = []
-        configured = []
+        for config in legacy_configs:
+            try:
+                strategy_class = self.STRATEGY_CLASSES.get(config['type'])
+                if strategy_class:
+                    strategy = strategy_class(config['name'], config['config'])
+                    self.strategies.append(strategy)
+            except Exception as e:
+                ctx.log.debug(f"Failed to load legacy strategy {config['name']}: {e}")
         
-        for service_name, cred in self.credentials.items():
-            if os.environ.get(cred.env_var):
-                configured.append(cred.display_name)
-            else:
-                missing.append(f"{cred.env_var} ({cred.display_name})")
+        # Basic telemetry blocking
+        self.telemetry_domains = [
+            'telemetry.anthropic.com',
+            'sentry.io',
+            'segment.com',
+        ]
+        self.block_telemetry = True
         
-        if configured:
-            ctx.log.info(f"✓ {len(configured)} credentials configured and available")
-            if self.verbose_logging:
-                for name in configured:
-                    ctx.log.info(f"  ✓ {name}")
-        
-        if missing:
-            ctx.log.warn(
-                f"⚠ {len(missing)} credentials not configured. "
-                "Injection will fail for these services:"
-            )
-            for env_var in missing:
-                ctx.log.warn(f"  ✗ {env_var}")
+        ctx.log.info(f"✓ Loaded {len(self.strategies)} legacy strategies")
     
     def _is_telemetry_request(self, host: str) -> bool:
-        """Check if the request is to a known telemetry endpoint."""
-        host_lower = host.lower()
-        return any(blocked in host_lower for blocked in self.telemetry_blocklist)
-    
-    def _is_host_whitelisted(self, cred: CredentialConfig, host: str) -> bool:
         """
-        Verify that the destination host is authorized for this credential type.
-        Supports exact matches, subdomain matches, and wildcard patterns (*.example.com).
+        Check if request is to a telemetry/analytics endpoint.
         
         Args:
-            cred: The credential configuration
             host: The destination hostname
             
         Returns:
-            True if the host is whitelisted for this credential
+            True if this is a telemetry request
         """
-        host_lower = host.lower()
-        
-        for allowed in cred.allowed_hosts:
-            allowed_lower = allowed.lower()
-            
-            # Exact match
-            if host_lower == allowed_lower:
-                return True
-            
-            # Wildcard subdomain match (*.example.com)
-            if allowed_lower.startswith('*.'):
-                domain = allowed_lower[2:]  # Remove "*."
-                if host_lower.endswith(f".{domain}") or host_lower == domain:
-                    return True
-            
-            # Standard subdomain check (example.com matches api.example.com)
-            if host_lower.endswith(f".{allowed_lower}"):
-                return True
-        
-        return False
-    
-    def _get_real_credential(self, cred: CredentialConfig) -> Optional[str]:
-        """
-        Retrieve the real credential from environment variables.
-        
-        Args:
-            cred: The credential configuration
-            
-        Returns:
-            The real credential value, or None if not found
-        """
-        return os.environ.get(cred.env_var)
-    
-    def _inject_credential_in_headers(
-        self, 
-        flow: http.HTTPFlow,
-        cred: CredentialConfig
-    ) -> bool:
-        """
-        Replace dummy tokens in headers with real credentials.
-        Supports multiple header locations and format templating.
-        
-        Args:
-            flow: The mitmproxy flow object
-            cred: The credential configuration
-            
-        Returns:
-            True if credential was injected, False otherwise
-        """
-        host = flow.request.pretty_host
-        
-        for header_config in cred.header_locations:
-            header_name = header_config['name']
-            format_template = header_config.get('format', '{token}')
-            
-            if header_name not in flow.request.headers:
-                continue
-            
-            header_value = flow.request.headers[header_name]
-            
-            # Check if dummy token is present
-            if cred.dummy_token not in header_value:
-                continue
-            
-            # Security check: Verify host is whitelisted
-            if not self._is_host_whitelisted(cred, host):
-                ctx.log.warn(
-                    f"SECURITY: Blocked {cred.display_name} credential "
-                    f"to unauthorized host: {host}"
-                )
-                flow.response = http.Response.make(
-                    403,
-                    f"Forbidden: {host} not whitelisted for {cred.display_name}".encode(),
-                    {"Content-Type": "text/plain"}
-                )
-                self.stats["requests_blocked"] += 1
-                return False
-            
-            # Get real credential
-            real_credential = self._get_real_credential(cred)
-            if not real_credential:
-                ctx.log.error(
-                    f"Cannot inject credential: {cred.env_var} not set in environment. "
-                    f"See: {cred.docs_url}"
-                )
-                flow.response = http.Response.make(
-                    500,
-                    f"Internal Error: {cred.display_name} not configured".encode(),
-                    {"Content-Type": "text/plain"}
-                )
-                return False
-            
-            # Apply format template and inject
-            formatted_credential = format_template.replace('{token}', real_credential)
-            
-            # If the dummy token is the entire value, replace it entirely
-            # Otherwise, do a string replacement
-            if header_value == cred.dummy_token:
-                new_header_value = formatted_credential
-            else:
-                new_header_value = header_value.replace(cred.dummy_token, formatted_credential)
-            
-            flow.request.headers[header_name] = new_header_value
-            
-            # Log injection (without revealing the real credential)
-            ctx.log.info(
-                f"✓ {cred.display_name} credential injected for {host} "
-                f"(header: {header_name})"
-            )
-            self.stats["credentials_injected"] += 1
-            return True
-        
-        return False
-    
-    def _inject_credential_in_query_params(
-        self,
-        flow: http.HTTPFlow,
-        cred: CredentialConfig
-    ) -> bool:
-        """
-        Replace dummy tokens in query parameters with real credentials.
-        
-        Args:
-            flow: The mitmproxy flow object
-            cred: The credential configuration
-            
-        Returns:
-            True if credential was injected, False otherwise
-        """
-        if not flow.request.query or not cred.query_param_names:
+        if not self.block_telemetry:
             return False
         
-        host = flow.request.pretty_host
-        
-        for param_name in cred.query_param_names:
-            if param_name not in flow.request.query:
-                continue
+        host_lower = host.lower()
+        for domain in self.telemetry_domains:
+            domain_lower = domain.lower()
             
-            param_value = flow.request.query[param_name]
+            # Exact match or subdomain match
+            if host_lower == domain_lower or host_lower.endswith(f".{domain_lower}"):
+                return True
             
-            if cred.dummy_token not in param_value:
-                continue
-            
-            # Security check
-            if not self._is_host_whitelisted(cred, host):
-                ctx.log.warn(
-                    f"SECURITY: Blocked {cred.display_name} in query param "
-                    f"to unauthorized host: {host}"
-                )
-                flow.response = http.Response.make(
-                    403,
-                    f"Forbidden: Host not whitelisted".encode(),
-                    {"Content-Type": "text/plain"}
-                )
-                self.stats["requests_blocked"] += 1
-                return False
-            
-            # Get real credential
-            real_credential = self._get_real_credential(cred)
-            if not real_credential:
-                ctx.log.error(f"{cred.env_var} not set in environment")
-                flow.response = http.Response.make(
-                    500,
-                    f"Internal Error: {cred.display_name} not configured".encode(),
-                    {"Content-Type": "text/plain"}
-                )
-                return False
-            
-            # Inject credential
-            new_param_value = param_value.replace(cred.dummy_token, real_credential)
-            flow.request.query[param_name] = new_param_value
-            
-            ctx.log.info(
-                f"✓ {cred.display_name} credential injected in query param for {host}"
-            )
-            self.stats["credentials_injected"] += 1
-            return True
+            # Wildcard match (*.example.com)
+            if domain_lower.startswith("*."):
+                base_domain = domain_lower[2:]
+                if host_lower.endswith(base_domain):
+                    return True
         
         return False
+    
+    def _find_matching_strategy(self, flow: http.HTTPFlow) -> Optional[InjectionStrategy]:
+        """
+        Find the first strategy that matches this request.
+        
+        For v2 config: Uses rules to determine strategy
+        For v1/legacy: Directly queries strategies
+        
+        Args:
+            flow: The mitmproxy flow object
+            
+        Returns:
+            Matching strategy instance or None
+        """
+        if self.config_mode == "v2" and self.rules:
+            # Use rule-based matching
+            return self._find_strategy_by_rules(flow)
+        else:
+            # Use direct strategy detection (v1/legacy)
+            return self._find_strategy_by_detection(flow)
+    
+    def _find_strategy_by_rules(self, flow: http.HTTPFlow) -> Optional[InjectionStrategy]:
+        """
+        Match request to strategy using v2 rules configuration.
+        
+        Args:
+            flow: The mitmproxy flow object
+            
+        Returns:
+            Matching strategy or None
+        """
+        host = flow.request.pretty_host
+        auth_header = flow.request.headers.get("Authorization", "")
+        
+        # Evaluate rules in priority order
+        for rule in self.rules:
+            rule_name = rule.get('name', 'unnamed')
+            
+            # Check domain match
+            domain_regex = rule.get('domain_regex')
+            if domain_regex and not re.search(domain_regex, host, re.IGNORECASE):
+                continue
+            
+            # Check trigger pattern match
+            trigger_regex = rule.get('trigger_header_regex')
+            if trigger_regex and not re.search(trigger_regex, auth_header, re.IGNORECASE):
+                continue
+            
+            # Find the strategy
+            strategy_name = rule.get('strategy')
+            for strategy in self.strategies:
+                if strategy.name == strategy_name:
+                    self.logger.debug(f"Rule '{rule_name}' matched, using strategy '{strategy_name}'")
+                    return strategy
+        
+        return None
+    
+    def _find_strategy_by_detection(self, flow: http.HTTPFlow) -> Optional[InjectionStrategy]:
+        """
+        Match request to strategy by asking each strategy to detect.
+        
+        Args:
+            flow: The mitmproxy flow object
+            
+        Returns:
+            First matching strategy or None
+        """
+        for strategy in self.strategies:
+            try:
+                if strategy.detect(flow):
+                    return strategy
+            except Exception as e:
+                self.logger.error(f"Strategy {strategy.name} detection failed: {e}")
+        
+        return None
     
     @concurrent
     def request(self, flow: http.HTTPFlow) -> None:
         """
-        Process each HTTP request with dynamic credential injection.
+        Main request handler called by mitmproxy.
         
-        This is the main hook called by mitmproxy for every request.
-        It iterates through all configured credentials and attempts injection.
+        Process flow:
+        1. Check for telemetry (block if needed)
+        2. Find matching strategy
+        3. Inject credentials via strategy
+        4. Handle errors based on fail_mode
+        
+        Args:
+            flow: The mitmproxy flow object
         """
         self.stats["requests_processed"] += 1
         host = flow.request.pretty_host
         
-        # Block known telemetry endpoints
+        # Block telemetry requests
         if self._is_telemetry_request(host):
             ctx.log.info(f"🚫 Blocked telemetry request to: {host}")
             flow.response = http.Response.make(
-                418,  # I'm a teapot (playful status for blocked requests)
-                b"Telemetry blocked by SafeClaude proxy",
+                418,  # I'm a teapot
+                b"Telemetry blocked by Universal Injector",
                 {"Content-Type": "text/plain"}
             )
             self.stats["telemetry_blocked"] += 1
             return
         
-        # Try to inject credentials from any configured service
-        # Check headers first (most common)
-        for cred in self.credentials.values():
-            if self._inject_credential_in_headers(flow, cred):
-                return
+        # Find matching strategy
+        strategy = self._find_matching_strategy(flow)
         
-        # Check query parameters
-        for cred in self.credentials.values():
-            if self._inject_credential_in_query_params(flow, cred):
-                return
+        if not strategy:
+            # No strategy matched - pass through
+            self.logger.debug(f"No strategy matched for {host}, passing through")
+            return
         
-        # No credentials were injected - request passes through as-is
-        if self.verbose_logging:
-            ctx.log.info(f"→ Passing through request to {host} (no credential injection needed)")
+        # Inject credentials using strategy
+        try:
+            strategy.inject(flow)
+            self.stats["credentials_injected"] += 1
+            
+        except Exception as e:
+            self.stats["strategy_errors"] += 1
+            self.logger.error(f"Strategy {strategy.name} injection failed: {e}")
+            
+            # Handle based on fail_mode
+            if self.fail_mode == "closed":
+                # Fail closed: block the request
+                flow.response = http.Response.make(
+                    500,
+                    f"Credential injection failed: {str(e)}".encode(),
+                    {"Content-Type": "text/plain"}
+                )
+                self.stats["requests_blocked"] += 1
+            else:
+                # Fail open: allow request to pass through
+                self.logger.warn(f"Fail-open mode: allowing request to {host} despite injection error")
     
     def done(self):
         """Called when mitmproxy shuts down. Print statistics."""
-        ctx.log.info("=" * 60)
-        ctx.log.info("SafeClaude Proxy Statistics:")
-        ctx.log.info(f"  Total requests processed: {self.stats['requests_processed']}")
-        ctx.log.info(f"  Credentials injected: {self.stats['credentials_injected']}")
-        ctx.log.info(f"  Requests blocked (security): {self.stats['requests_blocked']}")
-        ctx.log.info(f"  Telemetry blocked: {self.stats['telemetry_blocked']}")
-        ctx.log.info("=" * 60)
+        ctx.log.info("=" * 70)
+        ctx.log.info("Universal API Credential Injector v2.0 - Session Statistics")
+        ctx.log.info("=" * 70)
+        ctx.log.info(f"Configuration Mode: {self.config_mode}")
+        ctx.log.info(f"Strategies Loaded: {len(self.strategies)}")
+        ctx.log.info(f"Rules Loaded: {len(self.rules)}")
+        ctx.log.info("-" * 70)
+        ctx.log.info(f"Total Requests Processed: {self.stats['requests_processed']}")
+        ctx.log.info(f"Credentials Injected: {self.stats['credentials_injected']}")
+        ctx.log.info(f"Requests Blocked (Security): {self.stats['requests_blocked']}")
+        ctx.log.info(f"Telemetry Blocked: {self.stats['telemetry_blocked']}")
+        ctx.log.info(f"Strategy Errors: {self.stats['strategy_errors']}")
+        ctx.log.info("=" * 70)
 
 
-# Create global instance for mitmproxy
-addons = [UniversalCredentialInjector()]
+# Create global addon instance for mitmproxy
+addons = [UniversalInjector()]

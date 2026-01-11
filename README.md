@@ -1,329 +1,601 @@
-# SafeClaude - Zero-Knowledge Agent Environment
+# Universal API Credential Injector v2.0
 
-A secure, containerized development environment for AI agents implementing a "zero-knowledge" credential management model where the agent never has access to real API keys.
+**A transparent, zero-knowledge credential management proxy for secure API access.**
 
-## ✨ NEW: Universal Credential Support
+Transform any application into a credential-safe environment where real API keys never touch your code. Supports AWS, Stripe, GitHub, OpenAI, and any HTTP-based API.
 
-**SafeClaude now supports ANY API credential!** 🎉
+---
 
-Add credentials for **Binance, eBay, Shopify, Stripe, Slack, Discord, or literally any API** without touching code:
+## 🚀 What's New in v2.0
 
-- ✅ **No code changes** - Just edit `credentials.yml`
-- ✅ **No rebuilds** - Changes take effect on restart
-- ✅ **Interactive wizard** - Run `./scripts/add-credential.sh`
-- ✅ **View status** - Run `./scripts/list-credentials.sh`
+### Major Architecture Overhaul
 
-**Example:** Add Binance API in 3 steps:
-```bash
-# 1. Add to credentials.yml
-binance:
-  display_name: "Binance API"
-  dummy_token: "DUMMY_BINANCE_KEY"
-  env_var: "REAL_BINANCE_API_KEY"
-  header_locations:
-    - name: "X-MBX-APIKEY"
-      format: "{token}"
-  allowed_hosts:
-    - "api.binance.com"
-    
-# 2. Add to .env
-REAL_BINANCE_API_KEY=your-actual-key
+- ✅ **AWS SigV4 Support** - Full AWS Signature Version 4 implementation for S3, EC2, Lambda, and all AWS services
+- ✅ **Strategy Pattern** - Pluggable authentication protocols (Bearer, AWS SigV4, HMAC)
+- ✅ **Transparent Mode** - Automatic traffic interception with iptables (no proxy environment variables needed)
+- ✅ **Rule-Based Routing** - Priority-based request matching with flexible configuration
+- ✅ **Backward Compatible** - Automatically detects and converts v1 configurations
 
-# 3. Restart
-docker-compose restart proxy
-```
+### From SafeClaude to Universal Injector
 
-📖 **[Full Guide: Adding New Credentials →](./docs/ADDING_CREDENTIALS.md)**
+This project has evolved from an AI agent-specific tool to a **universal enterprise credential management solution**. While it still works perfectly for AI development, it now supports any application that makes HTTP API calls.
+
+---
+
+## 🎯 Use Cases
+
+### Enterprise API Security
+- **Multi-Cloud Deployments**: Securely access AWS, Azure, GCP without credential exposure
+- **Payment Processing**: Stripe, PayPal, Square integration without key leakage
+- **Microservices**: Decouple authentication from application code
+- **CI/CD Pipelines**: Secure credential injection in build processes
+
+### AI & Development
+- **AI Agents**: Claude, GPT, autonomous systems with zero-knowledge credentials
+- **Development Containers**: Secure dev environments with production API access
+- **Testing**: Integration tests with real APIs without hardcoded keys
+
+---
 
 ## 🔒 Security Architecture
 
-SafeClaude uses a **sidecar proxy pattern** to inject credentials on-the-fly:
+### Zero-Knowledge Principle
 
-- **Agent Container**: The "untrusted" workspace where the AI operates with dummy tokens
-- **Proxy Container**: The "trusted" keyring that holds real credentials and injects them during HTTP requests
-- **Zero-Knowledge Principle**: Agent never sees, stores, or can access real credentials
+**The application never sees real credentials.** All authentication happens transparently in the proxy layer.
 
-### Key Security Features
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your Application                      │
+│           Uses: AKIA00000000DUMMYKEY                     │
+│                 (Dummy Credential)                       │
+└──────────────────────┬──────────────────────────────────┘
+                       │ All HTTP traffic automatically
+                       │ intercepted (transparent mode)
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│              Universal Injector Proxy                    │
+│  • Detects dummy credentials                             │
+│  • Validates destination host                            │
+│  • Signs request with real credentials                   │
+│  • AWS SigV4, Bearer tokens, HMAC                        │
+└──────────────────────┬──────────────────────────────────┘
+                       │ Real authenticated request
+                       ▼
+              ┌────────────────────┐
+              │   AWS / Stripe /   │
+              │  GitHub / OpenAI   │
+              └────────────────────┘
+```
 
-✅ **Credential Isolation** - Real API keys exist only in the proxy container  
-✅ **Host Whitelisting** - Credentials only work for approved destinations  
-✅ **Telemetry Blocking** - Known tracking endpoints automatically blocked  
-✅ **Ephemeral Recovery** - Container can be instantly reset if compromised  
-✅ **Audit Logging** - All credential injections logged (without revealing secrets)
+### Security Features
+
+- **🔐 Credential Isolation**: Real keys exist only in proxy memory
+- **✅ Host Whitelisting**: Per-credential destination validation
+- **🚫 Exfiltration Prevention**: Credentials only sent to approved hosts
+- **📊 Audit Logging**: Complete request tracking without exposing secrets
+- **🛡️ Fail-Closed**: Block requests on error (configurable)
+- **🔄 Transparent Mode**: Application unaware of proxy existence
+
+---
 
 ## 📋 Prerequisites
 
-- **Docker Engine** 24.0+ with Docker Compose v2.0+
-- **Minimum 8GB RAM** recommended
-- **Internet connection** for initial setup
+- **Docker Engine** 24.0+ with Docker Compose v2+
+- **8GB RAM** minimum
+- **Linux/macOS/Windows** (with WSL2)
+- API credentials for services you want to use
+
+---
 
 ## 🚀 Quick Start
 
-### 1. Clone the Repository
+### 1. Clone & Setup
 
 ```bash
-git clone git@github.ibm.com:Andrew-Gibson-CIC/safe-claude.git
+git clone <repo-url>
 cd safe-claude
+
+# Copy configuration template
+cp proxy/config.yaml.example proxy/config.yaml
 ```
 
 ### 2. Configure Credentials
 
-```bash
-# Copy the template
-cp .env.template .env
+Edit `proxy/config.yaml`:
 
-# Edit .env and add your real API keys
-vim .env  # or your preferred editor
+```yaml
+strategies:
+  # AWS Strategy
+  - name: aws-prod
+    type: aws_sigv4
+    config:
+      access_key_id: AWS_ACCESS_KEY_ID     # Environment variable name
+      secret_access_key: AWS_SECRET_ACCESS_KEY
+      region: us-east-1
+
+  # Stripe Strategy
+  - name: stripe
+    type: stripe
+    config:
+      token: STRIPE_SECRET_KEY
+
+rules:
+  - name: aws-injection
+    domain_regex: ".*\\.amazonaws\\.com$"
+    trigger_header_regex: "AKIA00000000DUMMYKEY"
+    strategy: aws-prod
+    priority: 100
 ```
 
-**Example `.env` file:**
-```bash
-REAL_OPENAI_API_KEY=sk-proj-abc123...
-REAL_GITHUB_TOKEN=ghp_xyz789...
-REAL_ANTHROPIC_API_KEY=sk-ant-def456...
-```
-
-⚠️ **CRITICAL**: The `.env` file is gitignored. Never commit it to version control!
-
-### 3. Create Workspace Directory
+Create `.env` file with real credentials:
 
 ```bash
-mkdir -p workspace
-cd workspace
-# Place your project code here
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+STRIPE_SECRET_KEY=sk_live_...
 ```
 
-### 4. Start the Environment
+### 3. Start the System
 
 ```bash
 docker-compose up -d
 ```
 
-This will:
-- Build the proxy and agent containers
-- Generate SSL certificates
-- Start the secure environment
+### 4. Use Your Application
 
-### 5. Enter the Agent Container
+**With Transparent Mode (Recommended):**
 
-```bash
-docker exec -it safeclaude_agent bash
+Your application automatically uses the proxy - no configuration needed!
+
+```python
+# Python example - just use dummy credentials
+import boto3
+
+# This will be automatically signed with real credentials
+s3 = boto3.client('s3',
+    aws_access_key_id='AKIA00000000DUMMYKEY',
+    aws_secret_access_key='DUMMY_SECRET'
+)
+
+# Works! Real credentials injected transparently
+buckets = s3.list_buckets()
 ```
 
-You're now inside the secure sandbox! Navigate to your workspace:
+**With Explicit Proxy Mode:**
 
 ```bash
-cd workspace
+export HTTP_PROXY=http://localhost:8080
+export HTTPS_PROXY=http://localhost:8080
+
+# Now all HTTP traffic goes through proxy
+curl https://api.github.com/user -H "Authorization: Bearer DUMMY_GITHUB_TOKEN"
 ```
 
-### 6. First-Time Authentication (One-Time Setup)
+---
 
-Authenticate with Anthropic Claude:
+## 📚 Supported Authentication Protocols
 
-```bash
-claude login
+### AWS Signature Version 4 (SigV4)
+
+Full implementation for all AWS services:
+
+```yaml
+- name: aws-prod
+  type: aws_sigv4
+  config:
+    access_key_id: AWS_ACCESS_KEY_ID
+    secret_access_key: AWS_SECRET_ACCESS_KEY
+    session_token: AWS_SESSION_TOKEN  # Optional, for STS
+    region: us-east-1
+    allowed_hosts:
+      - "*.amazonaws.com"
 ```
 
-This will display a URL. Copy and paste it into your browser to complete OAuth authentication. The refresh token is saved persistently, so you only need to do this once.
+**Supports:**
+- S3, EC2, Lambda, DynamoDB, etc.
+- All AWS regions
+- Temporary credentials (STS)
+- UNSIGNED-PAYLOAD for large uploads
+- Pre-signed URLs
 
-## 📚 Usage
+### Bearer Token
 
-### Running Claude Commands
+For APIs using `Authorization: Bearer <token>`:
 
-Inside the agent container:
+```yaml
+- name: openai
+  type: openai  # Pre-configured for OpenAI
+  config:
+    token: OPENAI_API_KEY
 
-```bash
-# Interactive mode
-claude
+- name: github
+  type: github  # Pre-configured for GitHub
+  config:
+    token: GITHUB_TOKEN
 
-# One-shot command
-claude "Analyze the src/ directory and create a README"
+- name: stripe
+  type: stripe  # Pre-configured for Stripe
+  config:
+    token: STRIPE_SECRET_KEY
 
-# Help
-claude --help
+- name: custom-api
+  type: bearer  # Generic Bearer token
+  config:
+    token: CUSTOM_API_TOKEN
+    dummy_pattern: "DUMMY_CUSTOM_.*"
+    allowed_hosts:
+      - "api.example.com"
 ```
 
-### Common Operations
+### HMAC (Coming Soon)
 
-```bash
-# Check status
-docker-compose ps
+For crypto exchanges and HMAC-signed APIs:
 
-# View logs
-docker logs safeclaude_proxy
-docker logs safeclaude_agent
-
-# Restart agent (clean slate recovery)
-docker restart safeclaude_agent
-
-# Stop everything
-docker-compose down
-
-# Rebuild containers
-docker-compose build --no-cache
+```yaml
+- name: binance
+  type: hmac
+  config:
+    api_key: BINANCE_API_KEY
+    secret_key: BINANCE_SECRET_KEY
 ```
+
+---
+
+## ⚙️ Configuration Guide
+
+### Strategy Types
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| `aws_sigv4` | AWS Signature Version 4 | All AWS services |
+| `bearer` | Generic Bearer token | Most REST APIs |
+| `stripe` | Stripe-specific Bearer | Stripe API |
+| `github` | GitHub-specific Bearer | GitHub API |
+| `openai` | OpenAI-specific Bearer | OpenAI API |
+| `hmac` | HMAC-SHA256 signing | Crypto exchanges (future) |
+
+### Rule Matching
+
+Rules are evaluated in **priority order** (highest first):
+
+```yaml
+rules:
+  - name: aws-dev
+    domain_regex: ".*\\.amazonaws\\.com$"
+    trigger_header_regex: "AKIA00000000DEVKEY"
+    strategy: aws-dev
+    priority: 110  # Higher priority
+
+  - name: aws-prod
+    domain_regex: ".*\\.amazonaws\\.com$"
+    trigger_header_regex: "AKIA[0-9A-Z]{16}DUMMY"
+    strategy: aws-prod
+    priority: 100  # Lower priority
+```
+
+### Global Settings
+
+```yaml
+settings:
+  log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+  log_format: json  # json or text
+  fail_mode: closed  # closed (block on error) or open (pass through)
+  max_body_size_mb: 100
+  block_telemetry: true
+  telemetry_domains:
+    - "telemetry.anthropic.com"
+    - "*.sentry.io"
+```
+
+---
+
+## 🔧 Advanced Usage
+
+### Multiple Credential Sets
+
+Support dev/staging/prod environments:
+
+```yaml
+strategies:
+  - name: aws-dev
+    type: aws_sigv4
+    config:
+      access_key_id: AWS_DEV_ACCESS_KEY_ID
+      secret_access_key: AWS_DEV_SECRET_ACCESS_KEY
+      region: us-west-2
+
+  - name: aws-prod
+    type: aws_sigv4
+    config:
+      access_key_id: AWS_PROD_ACCESS_KEY_ID
+      secret_access_key: AWS_PROD_SECRET_ACCESS_KEY
+      region: us-east-1
+
+rules:
+  - name: dev-injection
+    domain_regex: ".*\\.amazonaws\\.com$"
+    trigger_header_regex: "AKIA00000000DEVKEY"
+    strategy: aws-dev
+
+  - name: prod-injection
+    domain_regex: ".*\\.amazonaws\\.com$"
+    trigger_header_regex: "AKIA00000000PRODKEY"
+    strategy: aws-prod
+```
+
+### Kubernetes Deployment
+
+```yaml
+apiVersion: v1
+kind: Pod
+meta
+  name: app-with-injector
+spec:
+  initContainers:
+  - name: setup-iptables
+    image: universal-injector-proxy
+    securityContext:
+      capabilities:
+        add: ["NET_ADMIN"]
+    command: ["/setup-iptables.sh"]
+  
+  containers:
+  - name: proxy
+    image: universal-injector-proxy
+    ports:
+    - containerPort: 8080
+  
+  - name: app
+    image: your-application
+    # Shares network namespace with proxy
+```
+
+### CI/CD Integration
+
+```yaml
+# GitHub Actions example
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      proxy:
+        image: universal-injector-proxy
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET }}
+    steps:
+      - run: |
+          export HTTP_PROXY=http://proxy:8080
+          # Run tests with real API access
+          pytest tests/integration/
+```
+
+---
 
 ## 🧪 Testing
 
-### Run Unit Tests
+### Run Tests
 
 ```bash
-# Python unit tests for proxy logic
-python3 -m pytest tests/unit/ -v
+# Unit tests
+pytest tests/unit/ -v
 
-# Security penetration tests
-python3 -m pytest tests/security/ -v
+# Security tests
+pytest tests/security/ -v
+
+# Integration tests (requires credentials)
+pytest tests/integration/ -v
 ```
 
-### Test Coverage
+### Test AWS SigV4
+
+```python
+# tests/integration/test_aws.py
+def test_s3_list_buckets():
+    s3 = boto3.client('s3',
+        aws_access_key_id='AKIA00000000DUMMYKEY',
+        aws_secret_access_key='DUMMY'
+    )
+    response = s3.list_buckets()
+    assert 'Buckets' in response
+```
+
+---
+
+## 📊 Monitoring & Debugging
+
+### View Logs
 
 ```bash
-python3 -m pytest --cov=proxy --cov-report=html tests/
+# Proxy logs
+docker logs universal_injector_proxy
+
+# Filter for injections
+docker logs universal_injector_proxy | grep "injected credentials"
+
+# Filter for blocks
+docker logs universal_injector_proxy | grep "SECURITY"
 ```
 
-## 🔐 Security
+### Statistics
 
-### Threat Model
-
-SafeClaude is designed to protect against:
-
-- **R-01**: Context Pollution (credentials in LLM history)
-- **R-02**: Filesystem Destruction (agent breaks its own environment)
-- **R-03**: Host Contamination (agent affects host system)
-- **R-04**: Credential Exfiltration (prompt injection attacks)
-- **R-05**: Shadow Dependencies (typosquatting, malware)
-- **R-06**: Telemetry Leakage (usage data sent to third parties)
-
-See [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) for the complete security analysis.
-
-### Security Best Practices
-
-1. **Never mount your entire home directory** - Only mount specific project folders
-2. **Use version control** - Commit frequently; treat agent changes as untrusted
-3. **Review agent modifications** - Don't blindly accept all changes
-4. **Keep .env secure** - Never commit, share, or expose this file
-5. **Update regularly** - Pull latest images for security patches
-
-## 📖 Documentation
-
-- [Architecture Design](./SafeClaude%20Architecture%20Design.md) - System architecture and design philosophy
-- [Detailed Specification](./SafeClaude%20Detailed%20Specification.md) - Complete technical requirements
-- [Implementation Plan](./SafeClaude%20Phased%20Implementation%20Plan%20%26%20Roadmap.md) - Step-by-step build guide
-- [Risk Assessment](./SafeClaude%20Risks%20and%20Mitigations.md) - Threat model and mitigations
-- [Security Review](./SECURITY_REVIEW.md) - Comprehensive security analysis
-
-## 🏗️ Architecture
+On shutdown, the proxy displays session statistics:
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  Host Machine                    │
-│                                                  │
-│  ┌────────────────┐      ┌──────────────────┐  │
-│  │  Proxy (8080)  │◄─────│  Agent Container │  │
-│  │                │      │                   │  │
-│  │  • mitmproxy   │      │  • Claude CLI     │  │
-│  │  • inject.py   │      │  • Node.js 20     │  │
-│  │  • Real Keys   │      │  • Dummy Tokens   │  │
-│  │  • Whitelist   │      │  • Workspace      │  │
-│  └────────┬───────┘      └──────────┬────────┘  │
-│           │                         │           │
-│           │   Certificate Trust     │           │
-│           └─────────────────────────┘           │
-│                                                  │
-│           │                                      │
-│           ▼                                      │
-│    External APIs                                 │
-│    (OpenAI, GitHub, etc.)                        │
-└─────────────────────────────────────────────────┘
+======================================================================
+Universal API Credential Injector v2.0 - Session Statistics
+======================================================================
+Configuration Mode: v2
+Strategies Loaded: 5
+Rules Loaded: 8
+----------------------------------------------------------------------
+Total Requests Processed: 1,247
+Credentials Injected: 856
+Requests Blocked (Security): 3
+Telemetry Blocked: 12
+Strategy Errors: 0
+======================================================================
 ```
 
-### How It Works
+---
 
-1. **Agent** makes HTTP request with `DUMMY_OPENAI_KEY`
-2. **Proxy** intercepts the request
-3. **Whitelist Check**: Proxy validates destination is `api.openai.com`
-4. **Injection**: Proxy replaces dummy with `REAL_OPENAI_API_KEY`
-5. **Forward**: Request sent to external API with real credential
-6. **Response**: API response returned to agent
+## 🔄 Migration from v1
+
+### Automatic Conversion
+
+v2 automatically detects and converts v1 `credentials.yml`:
+
+```yaml
+# v1 format (still supported)
+credentials:
+  openai:
+    display_name: "OpenAI API"
+    dummy_token: "DUMMY_OPENAI_KEY"
+    env_var: "REAL_OPENAI_API_KEY"
+    allowed_hosts:
+      - "api.openai.com"
+```
+
+Converts to v2 Bearer strategy automatically!
+
+### Manual Migration
+
+For full v2 features, migrate to `config.yaml`:
+
+```bash
+# 1. Copy your old credentials.yml
+cp credentials.yml credentials.yml.backup
+
+# 2. Create new config.yaml
+cp proxy/config.yaml.example proxy/config.yaml
+
+# 3. Migrate each credential to a strategy
+# 4. Define rules for matching
+# 5. Test thoroughly
+```
+
+---
 
 ## 🛠️ Troubleshooting
 
-### Agent Won't Start
+### Certificate Issues
 
 ```bash
-# Check proxy is healthy
-docker-compose ps
-
-# View agent logs
-docker logs safeclaude_agent
-
-# Certificate issue? Rebuild
+# Regenerate certificates
 docker-compose down
-docker volume rm safeclaude_certs
+docker volume rm safe-claude_certs
 docker-compose up -d
 ```
 
-### Network Issues
+### AWS Signature Errors
 
 ```bash
-# Verify proxy is reachable
-docker exec safeclaude_agent curl -v http://proxy:8080
+# Check dummy credential format
+# Must match: AKIA[0-9A-Z]{16}DUMMY
 
-# Check proxy logs for blocks
-docker logs safeclaude_proxy | grep SECURITY
+# Enable debug logging
+docker-compose down
+docker-compose up  # Without -d to see logs
+
+# Check region detection
+docker logs universal_injector_proxy | grep "Detected AWS"
 ```
 
-### Permission Errors
+### Proxy Not Intercepting
 
 ```bash
-# Fix workspace permissions
-sudo chown -R 1000:1000 workspace/
+# Verify transparent mode
+docker exec universal_injector_proxy iptables -t nat -L
+
+# Check network mode
+docker inspect universal_injector_agent | grep NetworkMode
+
+# Test explicit proxy
+export HTTP_PROXY=http://localhost:8080
+curl -v https://api.github.com
 ```
+
+---
+
+## 📖 Documentation
+
+- [Architecture Design](./docs/Universal%20Injector%20Architecture.md)
+- [Detailed Specification](./docs/Universal%20Injector%20Specification.md)
+- [Implementation Plan](./docs/Universal%20Injector%20Implementation%20Plan.md)
+- [Risks & Mitigations](./docs/Universal%20Injector%20Risks%20and%20Mitigations.md)
+
+### v1 Documentation (Archived)
+
+- [v1 SafeClaude Docs](./docs/archive/v1-safeclaude/)
+
+---
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Run tests (`pytest tests/`)
-4. Commit changes (`git commit -m 'Add amazing feature'`)
-5. Push to branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+2. Create a feature branch
+3. Add tests for new strategies
+4. Submit a pull request
 
-### Development Setup
+### Adding New Strategies
 
-```bash
-# Install development dependencies
-pip install -r requirements-dev.txt
+```python
+# proxy/strategies/my_protocol.py
+from .base import InjectionStrategy
 
-# Run linters
-bandit -r proxy/
-pylint proxy/inject.py
-
-# Run full test suite
-pytest tests/ -v --cov=proxy
+class MyProtocolStrategy(InjectionStrategy):
+    def detect(self, flow):
+        # Detection logic
+        return "DUMMY" in flow.request.headers.get("X-My-Auth", "")
+    
+    def inject(self, flow):
+        # Injection logic
+        real_token = self.get_credential("token")
+        flow.request.headers["X-My-Auth"] = real_token
+        self.log_injection(flow)
 ```
+
+Register in `proxy/strategies/__init__.py` and `proxy/inject.py`.
+
+---
 
 ## 📜 License
 
 This project is proprietary IBM software. See LICENSE file for details.
 
+---
+
 ## 🙏 Acknowledgments
 
-- **Anthropic** - Claude API and CLI
-- **mitmproxy** - HTTP interception framework
+- **Anthropic** - Claude API
+- **mitmproxy** - HTTP interception framework  
+- **AWS** - boto3 and botocore libraries
 - **Docker** - Container platform
-
-## ⚠️ Disclaimer
-
-This tool is designed for development and testing environments. While it implements strong security controls, it should be thoroughly evaluated before use in production scenarios. See [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) for detailed security analysis and recommendations.
-
-## 📞 Support
-
-For issues, questions, or contributions:
-- **GitHub Issues**: [Report a bug](https://github.ibm.com/Andrew-Gibson-CIC/safe-claude/issues)
-- **Documentation**: See `/docs` directory
-- **Security**: Report security issues privately to the maintainers
 
 ---
 
-**Built with ❤️ for secure AI development**
+## ⚠️ Production Recommendations
+
+While Universal Injector v2 implements strong security controls, consider these enhancements for production:
+
+- ✅ Use HSM/KMS for credential storage
+- ✅ Implement mTLS between proxy and application
+- ✅ Add rate limiting to prevent DoS
+- ✅ Enable comprehensive audit logging
+- ✅ Use short-lived credentials (STS, OAuth)
+- ✅ Deploy in a dedicated security zone
+- ✅ Regular security audits and penetration testing
+
+---
+
+## 📞 Support
+
+- **GitHub Issues**: [Report bugs or request features](https://github.ibm.com/Andrew-Gibson-CIC/safe-claude/issues)
+- **Documentation**: See `/docs` directory
+- **Security**: Report security issues privately to maintainers
+
+---
+
+**Built with ❤️ for secure enterprise API access**
+
+*Universal Injector v2.0 - Zero-Knowledge Credential Management*
