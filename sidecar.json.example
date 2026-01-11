@@ -4,16 +4,11 @@
   "routes": {
     "/openai": {
       "target": "https://api.openai.com/v1",
-      "headers": {
-        "Authorization": "Bearer ${OPENAI_API_KEY}",
-        "Organization": "${OPENAI_ORG_ID}"
-      }
+      "replace_values": ["OPENAI_API_KEY", "OPENAI_ORG_ID"]
     },
     "/stripe": {
       "target": "https://api.stripe.com/v1",
-      "headers": {
-        "Authorization": "Bearer ${STRIPE_SECRET_KEY}"
-      }
+      "replace_values": ["STRIPE_SECRET_KEY"]
     }
   }
 }

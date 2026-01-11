@@ -64,9 +64,23 @@ func main() {
 			}
 		}
 
+		// Build replace_values map (env var name -> real value)
+		replaceValues := make(map[string]string)
+		for _, envVarName := range route.ReplaceValues {
+			if realValue, exists := env[envVarName]; exists {
+				replaceValues[envVarName] = realValue
+				if *verbose {
+					log.Printf("Route %s: replace_values loaded for %s", path, envVarName)
+				}
+			} else {
+				log.Printf("WARNING: Route %s: replace_values specifies '%s' but not found in env file", path, envVarName)
+			}
+		}
+
 		proxyServer.routes[path] = &ProxyRoute{
-			Target:  route.Target,
-			Headers: expandedHeaders,
+			Target:        route.Target,
+			Headers:       expandedHeaders,
+			ReplaceValues: replaceValues,
 		}
 	}
 

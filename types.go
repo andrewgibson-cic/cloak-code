@@ -9,14 +9,16 @@ type Config struct {
 
 // Route represents a single proxy route
 type Route struct {
-	Target string            `json:"target"`
-	Headers map[string]string `json:"headers"`
+	Target        string            `json:"target"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	ReplaceValues []string          `json:"replace_values,omitempty"`
 }
 
-// ProxyRoute extends Route with compiled headers
+// ProxyRoute extends Route with compiled headers and replace values
 type ProxyRoute struct {
-	Target  string
-	Headers map[string]string
+	Target        string
+	Headers       map[string]string
+	ReplaceValues map[string]string // env var name -> real value mapping
 }
 
 // ProxyServer holds the server configuration

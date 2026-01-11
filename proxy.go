@@ -84,9 +84,37 @@ func (ps *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Proxying: %s -> %s%s", originalPath, targetURL.String(), req.URL.Path)
 		}
 
-		// Remove Authorization and X-Api-Key headers from incoming request
-		req.Header.Del("Authorization")
-		req.Header.Del("X-Api-Key")
+		// Replace header values that match replace_values entries
+		// This scans ALL headers and replaces any occurrence of an env var name
+		// with the real value from .env.vault
+		replacedAuthHeaders := make(map[string]bool)
+		for headerName, headerValues := range req.Header {
+			for i, headerValue := range headerValues {
+				newValue := headerValue
+				// Check if this header value contains any of our replace_values keys
+				for envVarName, realValue := range route.ReplaceValues {
+					if strings.Contains(headerValue, envVarName) {
+						newValue = strings.ReplaceAll(headerValue, envVarName, realValue)
+						replacedAuthHeaders[headerName] = true
+						if ps.verbose {
+							log.Printf("Replaced in header %s: %s -> ***", headerName, envVarName)
+						}
+					}
+				}
+				if newValue != headerValue {
+					req.Header[headerName][i] = newValue
+				}
+			}
+		}
+
+		// Remove Authorization and X-Api-Key headers that were NOT replaced
+		// (This preserves headers that were successfully replaced via replace_values)
+		if !replacedAuthHeaders["Authorization"] {
+			req.Header.Del("Authorization")
+		}
+		if !replacedAuthHeaders["X-Api-Key"] {
+			req.Header.Del("X-Api-Key")
+		}
 
 		// Add secure headers from configuration
 		for key, value := range route.Headers {
