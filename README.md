@@ -6,19 +6,18 @@ Transform any application into a credential-safe environment where real API keys
 
 ---
 
-## 🚀 What's New in v2.0
+## Overview
 
-### Major Architecture Overhaul
+Universal API Credential Injector is a security proxy that automatically injects authentication credentials into HTTP requests. Originally built for AI agents like Claude, it has evolved into a universal enterprise solution for any application that needs secure API access.
 
-- ✅ **AWS SigV4 Support** - Full AWS Signature Version 4 implementation for S3, EC2, Lambda, and all AWS services
-- ✅ **Strategy Pattern** - Pluggable authentication protocols (Bearer, AWS SigV4, HMAC)
-- ✅ **Transparent Mode** - Automatic traffic interception with iptables (no proxy environment variables needed)
+### Key Features
+
+- ✅ **AWS SigV4 Support** - Full AWS Signature Version 4 implementation for all AWS services
+- ✅ **Strategy Pattern** - Pluggable authentication protocols (Bearer, AWS SigV4, API keys, custom headers)
+- ✅ **Transparent Mode** - Automatic traffic interception (no proxy configuration needed in your app)
 - ✅ **Rule-Based Routing** - Priority-based request matching with flexible configuration
-- ✅ **Backward Compatible** - Automatically detects and converts v1 configurations
-
-### From SafeClaude to Universal Injector
-
-This project has evolved from an AI agent-specific tool to a **universal enterprise credential management solution**. While it still works perfectly for AI development, it now supports any application that makes HTTP API calls.
+- ✅ **Zero-Knowledge Security** - Applications never see real credentials
+- ✅ **Host Whitelisting** - Per-credential destination validation prevents credential exfiltration
 
 ---
 
@@ -80,96 +79,408 @@ This project has evolved from an AI agent-specific tool to a **universal enterpr
 
 ## 📋 Prerequisites
 
+Before you begin, ensure you have:
+
 - **Docker Engine** 24.0+ with Docker Compose v2+
-- **8GB RAM** minimum
-- **Linux/macOS/Windows** (with WSL2)
-- API credentials for services you want to use
+- **8GB RAM** minimum (16GB recommended for multiple services)
+- **Linux/macOS/Windows** (Windows requires WSL2)
+- **API credentials** for services you want to use
+- **Basic knowledge** of YAML configuration and environment variables
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Installation & Setup
 
-### 1. Clone & Setup
+### Step 1: Clone the Repository
 
 ```bash
-git clone <repo-url>
+git clone <repository-url>
 cd safe-claude
-
-# Copy configuration template
-cp proxy/config.yaml.example proxy/config.yaml
 ```
 
-### 2. Configure Credentials
+### Step 2: Copy Configuration Templates
 
-Edit `proxy/config.yaml`:
+```bash
+# Copy proxy configuration template
+cp proxy/config.yaml.example proxy/config.yaml
+
+# Copy environment variables template
+cp .env.template .env
+```
+
+### Step 3: Configure Your Credentials
+
+This is the most important step. You need to configure two files:
+
+#### A. Configure `proxy/config.yaml`
+
+This file defines **strategies** (how to authenticate) and **rules** (when to apply them).
+
+**Example configuration for AWS + GitHub + OpenAI:**
 
 ```yaml
+# proxy/config.yaml
+
 strategies:
-  # AWS Strategy
+  # AWS Strategy - for all AWS services (S3, EC2, Lambda, etc.)
   - name: aws-prod
     type: aws_sigv4
     config:
-      access_key_id: AWS_ACCESS_KEY_ID     # Environment variable name
-      secret_access_key: AWS_SECRET_ACCESS_KEY
+      access_key_id: AWS_ACCESS_KEY_ID        # Reads from .env
+      secret_access_key: AWS_SECRET_ACCESS_KEY # Reads from .env
       region: us-east-1
-
-  # Stripe Strategy
-  - name: stripe
-    type: stripe
+      allowed_hosts:
+        - "*.amazonaws.com"
+  
+  # GitHub Strategy
+  - name: github
+    type: github
     config:
-      token: STRIPE_SECRET_KEY
+      token: GITHUB_TOKEN  # Reads from .env
+  
+  # OpenAI Strategy
+  - name: openai
+    type: openai
+    config:
+      token: OPENAI_API_KEY  # Reads from .env
 
 rules:
+  # When app uses dummy AWS credentials, inject real ones
   - name: aws-injection
     domain_regex: ".*\\.amazonaws\\.com$"
-    trigger_header_regex: "AKIA00000000DUMMYKEY"
+    trigger_header_regex: "AKIA[0-9A-Z]{16}DUMMY"
     strategy: aws-prod
     priority: 100
+  
+  # When app uses dummy GitHub token, inject real one
+  - name: github-injection
+    domain_regex: "^(api\\.)?github\\.com$"
+    trigger_header_regex: "(ghp_[a-zA-Z0-9]{36}DUMMY|DUMMY_GITHUB_TOKEN)"
+    strategy: github
+    priority: 100
+  
+  # When app uses dummy OpenAI key, inject real one
+  - name: openai-injection
+    domain_regex: "^api\\.openai\\.com$"
+    trigger_header_regex: "(sk-proj-[a-zA-Z0-9]{32}DUMMY|DUMMY_OPENAI_KEY)"
+    strategy: openai
+    priority: 100
+
+settings:
+  log_level: INFO
+  log_format: json
+  fail_mode: closed  # Block requests on error (secure default)
 ```
 
-Create `.env` file with real credentials:
+See the [Configuration Reference](#⚙️-configuration-guide) section below for all options.
+
+#### B. Configure `.env` File
+
+This file contains your **real API credentials**. Never commit this file!
 
 ```bash
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
-STRIPE_SECRET_KEY=sk_live_...
+# .env
+
+# ============================================================================
+# AWS CREDENTIALS
+# ============================================================================
+# Get from: https://console.aws.amazon.com/iam/home#/security_credentials
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+# Optional: For temporary credentials
+# AWS_SESSION_TOKEN=your-session-token
+
+# ============================================================================
+# GITHUB CREDENTIALS
+# ============================================================================
+# Get from: https://github.com/settings/tokens
+GITHUB_TOKEN=ghp_YourGitHubPersonalAccessTokenHere
+
+# ============================================================================
+# OPENAI CREDENTIALS
+# ============================================================================
+# Get from: https://platform.openai.com/api-keys
+OPENAI_API_KEY=sk-proj-YourOpenAIKeyHere
+
+# ============================================================================
+# STRIPE CREDENTIALS (if using)
+# ============================================================================
+# Get from: https://stripe.com/docs/keys
+# STRIPE_SECRET_KEY=sk_live_YourStripeKeyHere
+
+# ============================================================================
+# ADD MORE CREDENTIALS AS NEEDED
+# ============================================================================
 ```
 
-### 3. Start the System
+⚠️ **Important**: The `.env` file is already in `.gitignore`. Never commit it to version control!
+
+### Step 4: Start the Services
 
 ```bash
+# Start in detached mode
 docker-compose up -d
+
+# View logs to verify startup
+docker-compose logs -f
 ```
 
-### 4. Use Your Application
+You should see output like:
+```
+proxy_1  | ✓ Loaded 3 strategies: aws-prod, github, openai
+proxy_1  | ✓ Loaded 3 rules
+proxy_1  | ✓ Proxy listening on :8080
+agent_1  | ✓ Transparent mode configured
+```
 
-**With Transparent Mode (Recommended):**
+### Step 5: Verify Installation
 
-Your application automatically uses the proxy - no configuration needed!
+```bash
+# Check container status
+docker-compose ps
+
+# Should show both containers running:
+# NAME                  STATUS
+# safe-claude-proxy-1   Up
+# safe-claude-agent-1   Up
+
+# Test the proxy
+docker-compose exec agent curl -v http://httpbin.org/headers
+```
+
+---
+
+## 🎯 How to Use
+
+### Method 1: Transparent Mode (Recommended)
+
+In transparent mode, your application doesn't need to know about the proxy. Traffic is automatically intercepted.
+
+**Example: Python with AWS S3**
 
 ```python
-# Python example - just use dummy credentials
 import boto3
 
-# This will be automatically signed with real credentials
-s3 = boto3.client('s3',
+# Use dummy credentials - they'll be replaced with real ones automatically
+s3 = boto3.client(
+    's3',
     aws_access_key_id='AKIA00000000DUMMYKEY',
-    aws_secret_access_key='DUMMY_SECRET'
+    aws_secret_access_key='DUMMY_SECRET_KEY_THAT_WILL_BE_REPLACED'
 )
 
-# Works! Real credentials injected transparently
-buckets = s3.list_buckets()
+# This works! Real credentials injected transparently
+response = s3.list_buckets()
+print(f"Found {len(response['Buckets'])} buckets")
 ```
 
-**With Explicit Proxy Mode:**
+**Example: Python with GitHub API**
+
+```python
+import requests
+
+# Use dummy token
+headers = {
+    'Authorization': 'Bearer DUMMY_GITHUB_TOKEN',
+    'Accept': 'application/vnd.github.v3+json'
+}
+
+# Real token injected automatically
+response = requests.get('https://api.github.com/user', headers=headers)
+print(response.json())
+```
+
+**Example: cURL with OpenAI**
+
+```bash
+# Inside the agent container
+docker-compose exec agent bash
+
+# Use dummy key - it gets replaced
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer DUMMY_OPENAI_KEY"
+```
+
+### Method 2: Explicit Proxy Mode
+
+Set proxy environment variables in your application:
 
 ```bash
 export HTTP_PROXY=http://localhost:8080
 export HTTPS_PROXY=http://localhost:8080
+export NO_PROXY=localhost,127.0.0.1
 
-# Now all HTTP traffic goes through proxy
-curl https://api.github.com/user -H "Authorization: Bearer DUMMY_GITHUB_TOKEN"
+# Now all HTTP/HTTPS traffic goes through the proxy
+python your_application.py
 ```
+
+---
+
+## 🔧 Adding Different Credentials
+
+You can add support for any API that uses HTTP-based authentication. Here's how:
+
+### Quick Method: Use the Interactive Script
+
+```bash
+./scripts/add-credential.sh
+```
+
+The script will guide you through:
+1. Choosing an authentication type
+2. Configuring the service details
+3. Setting up the matching rules
+4. Adding environment variables
+
+### Manual Method: Step-by-Step
+
+#### Example: Adding Stripe
+
+**1. Add strategy to `proxy/config.yaml`:**
+
+```yaml
+strategies:
+  - name: stripe-live
+    type: stripe  # Pre-configured Stripe support
+    config:
+      token: STRIPE_SECRET_KEY  # Environment variable name
+```
+
+**2. Add rule to `proxy/config.yaml`:**
+
+```yaml
+rules:
+  - name: stripe-injection
+    domain_regex: "^(api\\.)?stripe\\.com$"
+    trigger_header_regex: "sk_(test|live)_00000000"
+    strategy: stripe-live
+    priority: 100
+```
+
+**3. Add credential to `.env`:**
+
+```bash
+# Get from: https://stripe.com/docs/keys
+STRIPE_SECRET_KEY=sk_live_YourRealStripeSecretKey
+```
+
+**4. Restart the proxy:**
+
+```bash
+docker-compose restart proxy
+```
+
+**5. Use in your application:**
+
+```python
+import stripe
+
+# Use dummy key
+stripe.api_key = "sk_live_00000000"
+
+# Real key injected automatically
+customers = stripe.Customer.list(limit=3)
+```
+
+#### Example: Adding a Custom API
+
+For APIs not pre-configured, use the generic `bearer` type:
+
+**1. Add strategy:**
+
+```yaml
+strategies:
+  - name: my-custom-api
+    type: bearer
+    config:
+      token: CUSTOM_API_TOKEN
+      dummy_pattern: "DUMMY_CUSTOM_TOKEN"
+      allowed_hosts:
+        - "api.mycustomapi.com"
+        - "*.mycustomapi.com"
+```
+
+**2. Add rule:**
+
+```yaml
+rules:
+  - name: custom-api-injection
+    domain_regex: "^(.*\\.)?mycustomapi\\.com$"
+    trigger_header_regex: "DUMMY_CUSTOM_TOKEN"
+    strategy: my-custom-api
+    priority: 100
+```
+
+**3. Add credential to `.env`:**
+
+```bash
+CUSTOM_API_TOKEN=your-real-custom-api-token
+```
+
+**4. Restart and use:**
+
+```bash
+docker-compose restart proxy
+
+# Use dummy token in your app
+curl https://api.mycustomapi.com/data \
+  -H "Authorization: Bearer DUMMY_CUSTOM_TOKEN"
+```
+
+#### More Examples: Common APIs
+
+**Slack:**
+
+```yaml
+strategies:
+  - name: slack
+    type: bearer
+    config:
+      token: SLACK_BOT_TOKEN
+      dummy_pattern: "xoxb-DUMMY"
+      allowed_hosts:
+        - "slack.com"
+        - "*.slack.com"
+
+rules:
+  - name: slack-injection
+    domain_regex: "^(.*\\.)?slack\\.com$"
+    trigger_header_regex: "xoxb-DUMMY"
+    strategy: slack
+    priority: 100
+```
+
+```bash
+# .env
+SLACK_BOT_TOKEN=xoxb-your-real-slack-bot-token
+```
+
+**Twilio:**
+
+```yaml
+strategies:
+  - name: twilio
+    type: bearer
+    config:
+      token: TWILIO_AUTH_TOKEN
+      dummy_pattern: "DUMMY_TWILIO"
+      allowed_hosts:
+        - "api.twilio.com"
+        - "*.twilio.com"
+
+rules:
+  - name: twilio-injection
+    domain_regex: "^(.*\\.)?twilio\\.com$"
+    trigger_header_regex: "DUMMY_TWILIO"
+    strategy: twilio
+    priority: 100
+```
+
+```bash
+# .env
+TWILIO_AUTH_TOKEN=your-real-twilio-auth-token
+```
+
+For more detailed examples and authentication methods, see [docs/ADDING_CREDENTIALS.md](docs/ADDING_CREDENTIALS.md).
 
 ---
 
@@ -439,44 +750,7 @@ Strategy Errors: 0
 
 ---
 
-## 🔄 Migration from v1
-
-### Automatic Conversion
-
-v2 automatically detects and converts v1 `credentials.yml`:
-
-```yaml
-# v1 format (still supported)
-credentials:
-  openai:
-    display_name: "OpenAI API"
-    dummy_token: "DUMMY_OPENAI_KEY"
-    env_var: "REAL_OPENAI_API_KEY"
-    allowed_hosts:
-      - "api.openai.com"
-```
-
-Converts to v2 Bearer strategy automatically!
-
-### Manual Migration
-
-For full v2 features, migrate to `config.yaml`:
-
-```bash
-# 1. Copy your old credentials.yml
-cp credentials.yml credentials.yml.backup
-
-# 2. Create new config.yaml
-cp proxy/config.yaml.example proxy/config.yaml
-
-# 3. Migrate each credential to a strategy
-# 4. Define rules for matching
-# 5. Test thoroughly
-```
-
----
-
-## 🛠️ Troubleshooting
+## ️ Troubleshooting
 
 ### Certificate Issues
 
