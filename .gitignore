@@ -55,4 +55,4 @@ temp/
 *.tmp
 
 # Certificate directories (runtime generated)
-certs/
+cloakcode_certs/

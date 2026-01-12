@@ -2,7 +2,7 @@
 set -e
 
 echo "=========================================="
-echo "SafeClaude Agent Container Starting..."
+echo "CloakCode Agent Container Starting..."
 echo "=========================================="
 
 # Certificate installation function
@@ -123,7 +123,7 @@ main() {
     display_environment
     
     echo "=========================================="
-    echo "SafeClaude Agent Ready!"
+    echo "CloakCode Agent Ready!"
     echo "=========================================="
     echo ""
     echo "Quick Start Guide:"

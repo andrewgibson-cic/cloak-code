@@ -1,5 +1,5 @@
 #!/bin/bash
-# SafeClaude - Interactive Credential Addition Tool
+# CloakCode - Interactive Credential Addition Tool
 # This script helps users add new API credentials to the system without editing files manually
 
 set -e
@@ -19,7 +19,7 @@ ENV_TEMPLATE="$PROJECT_ROOT/.env.template"
 ENV_FILE="$PROJECT_ROOT/.env"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   SafeClaude - Add New API Credential                     ║${NC}"
+echo -e "${BLUE}║   CloakCode - Add New API Credential                      ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -29,7 +29,7 @@ if [ ! -f "$CREDENTIALS_FILE" ]; then
     exit 1
 fi
 
-echo -e "${GREEN}This wizard will help you add a new API credential to SafeClaude.${NC}"
+echo -e "${GREEN}This wizard will help you add a new API credential to CloakCode.${NC}"
 echo -e "${YELLOW}You'll need to edit credentials.yml and add the key to your .env file.${NC}"
 echo ""
 

@@ -1,23 +1,23 @@
 version: '3.8'
 
 services:
-  # Universal Injector Proxy - The "Keyring" that holds real credentials
+  # CloakCode Proxy - The "Keyring" that holds real credentials
   # v2.0 - Strategy-based architecture with AWS SigV4 support
   proxy:
     build:
       context: ./proxy
       dockerfile: Dockerfile
-    container_name: universal_injector_proxy
+    container_name: cloakcode_proxy
     hostname: proxy
     networks:
-      - injector_internal
+      - cloakcode_internal
     ports:
       - "8080:8080"
     volumes:
       - ./.env:/app/.env:ro
       - ./proxy/config.yaml:/app/config.yaml:ro
       - ./credentials.yml:/app/credentials.yml:ro
-      - certs:/certs
+      - cloakcode_certs:/certs
     env_file:
       - .env
     environment:
@@ -59,13 +59,13 @@ services:
     build:
       context: ./agent
       dockerfile: Dockerfile
-    container_name: universal_injector_agent
+    container_name: cloakcode_agent
     hostname: agent
     networks:
-      - injector_internal
+      - cloakcode_internal
     volumes:
-      - agent_auth_data:/home/agent/.config
-      - certs:/certs:ro
+      - cloakcode_agent_auth:/home/agent/.config
+      - cloakcode_certs:/certs:ro
       - ./workspace:/home/agent/workspace
     environment:
       # Explicit proxy mode
@@ -114,7 +114,7 @@ services:
         max-file: "3"
 
 networks:
-  injector_internal:
+  cloakcode_internal:
     driver: bridge
     internal: false
     ipam:
@@ -122,7 +122,7 @@ networks:
         - subnet: 172.28.0.0/16
 
 volumes:
-  agent_auth_data:
+  cloakcode_agent_auth:
     driver: local
-  certs:
+  cloakcode_certs:
     driver: local

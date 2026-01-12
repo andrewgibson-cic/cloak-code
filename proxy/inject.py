@@ -196,7 +196,7 @@ class UniversalInjector:
         """
         Load v1 credentials.yml format and convert to strategies.
         
-        This provides backward compatibility with the original SafeClaude format.
+        This provides backward compatibility with the original CloakCode v1 format.
         
         Args:
             config_path: Path to credentials.yml file

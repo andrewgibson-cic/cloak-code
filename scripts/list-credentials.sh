@@ -1,5 +1,5 @@
 #!/bin/bash
-# SafeClaude - List Configured Credentials
+# CloakCode - List Configured Credentials
 # Shows all configured API services and their status
 
 set -e
@@ -19,7 +19,7 @@ CREDENTIALS_FILE="$PROJECT_ROOT/credentials.yml"
 ENV_FILE="$PROJECT_ROOT/.env"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   SafeClaude - Configured API Credentials                 ║${NC}"
+echo -e "${BLUE}║   CloakCode - Configured API Credentials                  ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
