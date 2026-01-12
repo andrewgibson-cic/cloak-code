@@ -215,7 +215,40 @@ OPENAI_API_KEY=sk-proj-YourOpenAIKeyHere
 
 ⚠️ **Important**: The `.env` file is already in `.gitignore`. Never commit it to version control!
 
-### Step 4: Start the Services
+### Step 4: Setup SSH Keys (Optional - for Git Operations)
+
+If you want to use SSH for git operations (clone, push, pull):
+
+```bash
+# Option 1: Use the automated setup (runs during 'make install')
+make setup-ssh
+
+# Option 2: Manual setup
+./scripts/setup-ssh-keys.sh
+```
+
+This will:
+- Copy your SSH keys from `~/.ssh/` to `./ssh-keys/`
+- Create SSH config for GitHub, GitLab, Bitbucket
+- Set proper permissions (600 for private keys)
+- Add `ssh-keys/` to `.gitignore`
+
+**Note**: SSH keys are **automatically mounted** into the container and configured at startup. No additional configuration needed!
+
+To use SSH in the container:
+```bash
+# Test SSH connection
+docker-compose exec agent ssh -T git@github.com
+
+# Clone repositories via SSH
+docker-compose exec agent git clone git@github.com:user/repo.git
+
+# Git automatically uses SSH for GitHub/GitLab URLs
+```
+
+See [SSH Key Setup Guide](docs/SSH_KEY_SETUP.md) for detailed instructions.
+
+### Step 5: Start the Services
 
 ```bash
 # Start in detached mode

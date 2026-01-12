@@ -69,6 +69,9 @@ services:
       - cloakcode_agent_auth:/home/agent/.config
       - cloakcode_certs:/certs:ro
       - ./workspace:/home/agent/workspace
+      # SSH keys for git operations (if ssh-keys directory exists)
+      # Automatically mounted by make install/setup
+      - ./ssh-keys:/ssh-keys:ro
     environment:
       # Explicit proxy mode
       HTTP_PROXY: "http://proxy:8080"

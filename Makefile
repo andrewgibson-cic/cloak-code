@@ -10,7 +10,7 @@ help: ## Show this help message
 	@echo "Targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-setup: ## Initial setup - copy config templates
+setup: ## Initial setup - copy config templates and setup SSH keys
 	@echo "🔧 Setting up CloakCode..."
 	@if [ ! -f .env ]; then \
 		cp .env.template .env; \
@@ -21,6 +21,16 @@ setup: ## Initial setup - copy config templates
 	fi
 	@if [ ! -f proxy/config.yaml ]; then \
 		cp proxy/config.yaml.example proxy/config.yaml 2>/dev/null || echo "ℹ️  No config.yaml.example found"; \
+	fi
+	@echo ""
+	@echo "🔑 Setting up SSH keys for git operations..."
+	@if [ -d "${HOME}/.ssh" ] && ([ -f "${HOME}/.ssh/id_ed25519" ] || [ -f "${HOME}/.ssh/id_rsa" ]); then \
+		./scripts/setup-ssh-keys.sh; \
+		echo "✓ SSH keys configured for git operations"; \
+	else \
+		echo "ℹ️  No SSH keys found in ~/.ssh"; \
+		echo "   Git will use HTTPS (credentials via proxy)"; \
+		echo "   To enable SSH: generate keys with 'ssh-keygen -t ed25519' and run 'make setup-ssh'"; \
 	fi
 	@echo "✓ Setup complete!"
 
@@ -72,12 +82,68 @@ shell-proxy: ## Open shell in proxy container
 	@echo "🐚 Opening shell in proxy container..."
 	docker exec -it cloakcode_proxy sh
 
-test: ## Run test suite
-	@echo "🧪 Running tests..."
-	@if [ -f tests/run_tests.sh ]; then \
-		bash tests/run_tests.sh; \
+setup-ssh: ## Setup SSH keys for git operations
+	@echo "🔑 Setting up SSH keys..."
+	@./scripts/setup-ssh-keys.sh
+	@echo "✓ SSH keys configured!"
+	@echo ""
+	@echo "Next steps:"
+	@echo "1. Add public keys to your git hosting service (GitHub, GitLab, etc.)"
+	@echo "2. Run 'make start' to start containers with SSH support"
+	@echo "3. Test with: make test-ssh"
+
+test: ## Run all tests
+	@echo "🧪 Running all tests..."
+	@echo ""
+	@echo "Running unit tests..."
+	@./tests/unit/test_ssh_key_setup.sh || true
+	@echo ""
+	@echo "Running security tests..."
+	@./tests/security/test_ssh_key_security.sh || true
+	@echo ""
+	@if docker ps | grep -q cloakcode_agent; then \
+		echo "Running integration tests..."; \
+		./tests/integration/test_ssh_keys_integration.sh || true; \
 	else \
-		pytest tests/ -v; \
+		echo "⚠️  Skipping integration tests (containers not running)"; \
+		echo "   Run 'make start' first to enable integration tests"; \
+	fi
+	@if [ -f tests/run_tests.sh ]; then \
+		echo ""; \
+		echo "Running additional tests..."; \
+		bash tests/run_tests.sh; \
+	fi
+
+test-unit: ## Run unit tests only
+	@echo "🧪 Running unit tests..."
+	@./tests/unit/test_ssh_key_setup.sh
+
+test-security: ## Run security tests only
+	@echo "🔒 Running security tests..."
+	@./tests/security/test_ssh_key_security.sh
+
+test-integration: ## Run integration tests only
+	@echo "🔗 Running integration tests..."
+	@if docker ps | grep -q cloakcode_agent; then \
+		./tests/integration/test_ssh_keys_integration.sh; \
+	else \
+		echo "❌ Error: Containers not running"; \
+		echo "   Run 'make start' first"; \
+		exit 1; \
+	fi
+
+test-ssh: ## Test SSH connectivity in container
+	@echo "🔑 Testing SSH connectivity..."
+	@if docker ps | grep -q cloakcode_agent; then \
+		echo "Testing SSH to GitHub..."; \
+		docker exec cloakcode_agent ssh -T git@github.com || true; \
+		echo ""; \
+		echo "Testing git clone..."; \
+		docker exec cloakcode_agent sh -c 'cd /tmp && git clone --depth 1 https://github.com/github/gitignore.git test-ssh-clone && rm -rf test-ssh-clone' && echo "✓ Git operations working!"; \
+	else \
+		echo "❌ Error: Container not running"; \
+		echo "   Run 'make start' first"; \
+		exit 1; \
 	fi
 
 clean: ## Remove containers and volumes
