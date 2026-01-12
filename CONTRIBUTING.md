@@ -42,8 +42,8 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 ```bash
 # Fork and clone the repository
-git clone https://github.com/YOUR_USERNAME/cloakcode.git
-cd cloakcode
+git clone git@github.com:YOUR_USERNAME/cloak-code.git
+cd cloak-code
 
 # Create a feature branch
 git checkout -b feature/your-feature-name

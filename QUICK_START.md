@@ -21,14 +21,14 @@ Get up and running with CloakCode in 5 minutes!
 ### Option 1: One-Command Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/cloakcode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/andrewgibson-cic/cloak-code/master/install.sh | bash
 ```
 
 Or download and run:
 
 ```bash
-git clone https://github.com/YOUR_ORG/cloakcode.git
-cd cloakcode
+git clone git@github.com:andrewgibson-cic/cloak-code.git
+cd cloak-code
 ./install.sh
 ```
 
@@ -36,7 +36,7 @@ cd cloakcode
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_ORG/cloakcode.git
+git clone git@github.com:andrewgibson-cic/cloak-code.git
 cd cloakcode
 
 # Copy configuration templates
@@ -406,4 +406,4 @@ python my_app.py
 
 **Ready to go! 🚀 Start protecting your credentials with CloakCode.**
 
-Questions? Check the [full documentation](README.md) or [open an issue](https://github.com/YOUR_ORG/cloakcode/issues).
+Questions? Check the [full documentation](README.md) or [open an issue](https://github.com/andrewgibson-cic/cloak-code/issues).
