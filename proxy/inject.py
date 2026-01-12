@@ -42,6 +42,7 @@ try:
         GitHubStrategy,
         OpenAIStrategy,
         AWSSigV4Strategy,
+        GeminiStrategy,
     )
     STRATEGIES_AVAILABLE = True
 except ImportError as e:
@@ -68,6 +69,7 @@ class UniversalInjector:
         "github": GitHubStrategy,
         "openai": OpenAIStrategy,
         "aws_sigv4": AWSSigV4Strategy,
+        "gemini": GeminiStrategy,
     }
     
     def __init__(self):

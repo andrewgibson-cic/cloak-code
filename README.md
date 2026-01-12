@@ -480,6 +480,43 @@ rules:
 TWILIO_AUTH_TOKEN=your-real-twilio-auth-token
 ```
 
+**Google Gemini:**
+
+```yaml
+strategies:
+  - name: gemini
+    type: gemini  # Specialized strategy for Google Gemini
+    config:
+      api_key: GEMINI_API_KEY
+
+rules:
+  - name: gemini-injection
+    domain_regex: "^(.*\\.)?googleapis\\.com$"
+    trigger_header_regex: "(AIza[a-zA-Z0-9_-]{35}DUMMY|DUMMY_GEMINI_KEY)"
+    strategy: gemini
+    priority: 100
+```
+
+```bash
+# .env
+GEMINI_API_KEY=AIzaSyYourRealGeminiAPIKey
+```
+
+```python
+# Usage example
+import google.generativeai as genai
+
+# Configure with dummy key
+genai.configure(api_key="DUMMY_GEMINI_KEY")
+
+# Or use header directly
+import requests
+response = requests.get(
+    "https://generativelanguage.googleapis.com/v1/models",
+    headers={"x-goog-api-key": "DUMMY_GEMINI_KEY"}
+)
+```
+
 For more detailed examples and authentication methods, see [docs/ADDING_CREDENTIALS.md](docs/ADDING_CREDENTIALS.md).
 
 ---
@@ -563,6 +600,7 @@ For crypto exchanges and HMAC-signed APIs:
 | `stripe` | Stripe-specific Bearer | Stripe API |
 | `github` | GitHub-specific Bearer | GitHub API |
 | `openai` | OpenAI-specific Bearer | OpenAI API |
+| `gemini` | Google Gemini API key | Google Gemini AI |
 | `hmac` | HMAC-SHA256 signing | Crypto exchanges (future) |
 
 ### Rule Matching

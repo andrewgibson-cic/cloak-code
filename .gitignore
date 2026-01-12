@@ -3,6 +3,8 @@
 *.pem
 *.key
 *.crt
+proxy/config.yaml
+credentials.yml
 
 # Docker
 .docker/

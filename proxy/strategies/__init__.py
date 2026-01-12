@@ -8,6 +8,7 @@ Each strategy implements a specific authentication protocol.
 from .base import InjectionStrategy
 from .bearer import BearerStrategy, StripeStrategy, GitHubStrategy, OpenAIStrategy
 from .aws_sigv4 import AWSSigV4Strategy
+from .gemini import GeminiStrategy
 
 __all__ = [
     "InjectionStrategy",
@@ -16,4 +17,5 @@ __all__ = [
     "GitHubStrategy",
     "OpenAIStrategy",
     "AWSSigV4Strategy",
+    "GeminiStrategy",
 ]

@@ -47,6 +47,12 @@ strategies:
     config:
       token: OPENAI_API_KEY  # Read from env var
   
+  # Google Gemini API Strategy
+  - name: gemini
+    type: gemini  # Specialized strategy for Google Gemini
+    config:
+      api_key: GEMINI_API_KEY  # Read from env var
+  
   # Generic Bearer Token Strategy Example
   - name: custom-api
     type: bearer
@@ -96,6 +102,13 @@ rules:
     domain_regex: "^api\\.openai\\.com$"
     trigger_header_regex: "(sk-proj-[a-zA-Z0-9]{32}DUMMY|DUMMY_OPENAI_KEY)"
     strategy: openai
+    priority: 100
+  
+  # Google Gemini Rule
+  - name: gemini-injection
+    domain_regex: "^(.*\\.)?googleapis\\.com$"
+    trigger_header_regex: "(AIza[a-zA-Z0-9_-]{35}DUMMY|DUMMY_GEMINI_KEY)"
+    strategy: gemini
     priority: 100
 
 # Global Settings
