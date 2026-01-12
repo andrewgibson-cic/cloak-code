@@ -73,6 +73,100 @@ verify_proxy() {
     fi
 }
 
+# Setup SSH keys for git operations
+setup_ssh_keys() {
+    local ssh_keys_source="/ssh-keys"
+    local ssh_dir="$HOME/.ssh"
+    
+    # Check for SSH agent forwarding first
+    if [ -S "$SSH_AUTH_SOCK" ]; then
+        echo "✓ SSH agent forwarding detected"
+        echo "  Git operations will use host SSH agent"
+        return 0
+    fi
+    
+    # Check for mounted SSH keys
+    if [ -d "$ssh_keys_source" ] && [ "$(ls -A $ssh_keys_source 2>/dev/null)" ]; then
+        echo "Setting up SSH keys from mounted volume..."
+        
+        # Create SSH directory with proper permissions
+        mkdir -p "$ssh_dir"
+        chmod 700 "$ssh_dir"
+        
+        # Copy Ed25519 key (preferred)
+        if [ -f "$ssh_keys_source/id_ed25519" ]; then
+            cp "$ssh_keys_source/id_ed25519" "$ssh_dir/"
+            chmod 600 "$ssh_dir/id_ed25519"
+            echo "  ✓ Installed Ed25519 private key"
+            
+            if [ -f "$ssh_keys_source/id_ed25519.pub" ]; then
+                cp "$ssh_keys_source/id_ed25519.pub" "$ssh_dir/"
+                chmod 644 "$ssh_dir/id_ed25519.pub"
+            fi
+        fi
+        
+        # Copy RSA key (fallback)
+        if [ -f "$ssh_keys_source/id_rsa" ]; then
+            cp "$ssh_keys_source/id_rsa" "$ssh_dir/"
+            chmod 600 "$ssh_dir/id_rsa"
+            echo "  ✓ Installed RSA private key"
+            
+            if [ -f "$ssh_keys_source/id_rsa.pub" ]; then
+                cp "$ssh_keys_source/id_rsa.pub" "$ssh_dir/"
+                chmod 644 "$ssh_dir/id_rsa.pub"
+            fi
+        fi
+        
+        # Copy ECDSA key (if present)
+        if [ -f "$ssh_keys_source/id_ecdsa" ]; then
+            cp "$ssh_keys_source/id_ecdsa" "$ssh_dir/"
+            chmod 600 "$ssh_dir/id_ecdsa"
+            echo "  ✓ Installed ECDSA private key"
+            
+            if [ -f "$ssh_keys_source/id_ecdsa.pub" ]; then
+                cp "$ssh_keys_source/id_ecdsa.pub" "$ssh_dir/"
+                chmod 644 "$ssh_dir/id_ecdsa.pub"
+            fi
+        fi
+        
+        # Copy SSH config if provided
+        if [ -f "$ssh_keys_source/config" ]; then
+            cp "$ssh_keys_source/config" "$ssh_dir/"
+            chmod 600 "$ssh_dir/config"
+            echo "  ✓ Installed SSH config"
+        fi
+        
+        # Generate known_hosts for common git servers
+        echo "  Generating known_hosts for git servers..."
+        touch "$ssh_dir/known_hosts"
+        ssh-keyscan -H github.com >> "$ssh_dir/known_hosts" 2>/dev/null || true
+        ssh-keyscan -H gitlab.com >> "$ssh_dir/known_hosts" 2>/dev/null || true
+        ssh-keyscan -H bitbucket.org >> "$ssh_dir/known_hosts" 2>/dev/null || true
+        chmod 644 "$ssh_dir/known_hosts"
+        
+        # Configure git to prefer SSH for common hosts
+        git config --global url."git@github.com:".insteadOf "https://github.com/" || true
+        git config --global url."git@gitlab.com:".insteadOf "https://gitlab.com/" || true
+        
+        echo "✓ SSH keys configured successfully"
+        echo "  Git will use SSH for authenticated operations"
+        return 0
+    fi
+    
+    echo "ℹ  No SSH keys found"
+    echo "  Git operations will use HTTPS (credentials via proxy)"
+    echo "  To enable SSH: run ./scripts/setup-ssh-keys.sh on host"
+}
+
+# Cleanup SSH keys on exit
+cleanup_ssh_keys() {
+    if [ -d "$HOME/.ssh" ]; then
+        echo "Cleaning up SSH keys..."
+        rm -rf "$HOME/.ssh"
+        echo "✓ SSH keys cleared"
+    fi
+}
+
 # Display environment information
 display_environment() {
     echo ""
@@ -86,6 +180,16 @@ display_environment() {
     echo "NPM Version: $(npm --version)"
     echo "Python Version: $(python3 --version)"
     echo "Proxy: $HTTP_PROXY"
+    
+    # Show SSH status
+    if [ -d "$HOME/.ssh" ]; then
+        echo "SSH: Enabled (keys present)"
+    elif [ -S "$SSH_AUTH_SOCK" ]; then
+        echo "SSH: Enabled (agent forwarding)"
+    else
+        echo "SSH: Disabled (using HTTPS for git)"
+    fi
+    
     echo ""
     echo "Dummy Credentials (for reference):"
     echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:0:20}..."
@@ -110,11 +214,17 @@ setup_workspace() {
 
 # Main initialization sequence
 main() {
+    # Register cleanup trap
+    trap cleanup_ssh_keys EXIT
+    
     # Install certificate (critical for HTTPS)
     install_certificate
     
     # Setup workspace
     setup_workspace
+    
+    # Setup SSH keys for git operations
+    setup_ssh_keys
     
     # Verify proxy
     verify_proxy
@@ -130,10 +240,21 @@ main() {
     echo "  1. Navigate to workspace: cd workspace"
     echo "  2. Install tools: npm install -g @google/gemini-cli"
     echo "  3. Or: npm install -g @anthropic-ai/claude-code"
+    
+    # Add SSH-specific help if keys are available
+    if [ -d "$HOME/.ssh" ] || [ -S "$SSH_AUTH_SOCK" ]; then
+        echo ""
+        echo "Git/SSH Operations:"
+        echo "  - SSH keys are configured for git"
+        echo "  - Test with: ssh -T git@github.com"
+        echo "  - Clone repos: git clone git@github.com:user/repo.git"
+    fi
+    
     echo ""
     echo "Security Notes:"
     echo "  - All API calls are routed through the proxy"
     echo "  - Real credentials are never stored in this container"
+    echo "  - SSH keys are cleared automatically on exit"
     echo "  - This container can be safely reset at any time"
     echo ""
     echo "For help with tools, check their documentation"

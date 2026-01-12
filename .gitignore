@@ -56,3 +56,6 @@ temp/
 
 # Certificate directories (runtime generated)
 cloakcode_certs/
+
+# SSH keys directory (contains real private keys)
+ssh-keys/
