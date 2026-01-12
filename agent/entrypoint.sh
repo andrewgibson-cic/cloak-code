@@ -9,6 +9,7 @@ echo "=========================================="
 install_certificate() {
     local cert_file="/certs/mitmproxy-ca-cert.pem"
     local cert_dest="/usr/local/share/ca-certificates/mitmproxy-ca-cert.crt"
+    local cert_pem="/usr/local/share/ca-certificates/mitmproxy-ca-cert.pem"
     local timeout=30
     local elapsed=0
     
@@ -33,15 +34,21 @@ install_certificate() {
     echo "Installing certificate..."
     sudo cp "$cert_file" "$cert_dest"
     
+    # Create symlink for Node.js (NODE_EXTRA_CA_CERTS expects .pem)
+    echo "Creating certificate symlink for Node.js..."
+    sudo ln -sf "$cert_file" "$cert_pem"
+    
     # Update CA certificates (needs sudo)
     echo "Updating CA certificate store..."
     sudo update-ca-certificates
     
     echo "✓ Certificate installed successfully"
     
-    # Verify the certificate is readable
-    if [ -f "$cert_dest" ]; then
-        echo "✓ Certificate verified at: $cert_dest"
+    # Verify the certificates are readable
+    if [ -f "$cert_dest" ] && [ -f "$cert_pem" ]; then
+        echo "✓ Certificates verified:"
+        echo "  - System: $cert_dest"
+        echo "  - Node.js: $cert_pem"
     else
         echo "WARNING: Certificate not found after installation"
     fi
@@ -51,12 +58,18 @@ install_certificate() {
 verify_proxy() {
     echo "Verifying proxy connectivity..."
     
-    # Check if proxy is reachable
-    if curl -s --proxy "$HTTP_PROXY" --max-time 5 http://proxy:8080 > /dev/null 2>&1; then
+    # Check if proxy port is reachable (without making a proxied request)
+    # Using nc (netcat) to just check if the port is open
+    if nc -z -w5 proxy 8080 2>/dev/null; then
         echo "✓ Proxy is reachable at $HTTP_PROXY"
+        return 0
+    elif timeout 5 bash -c 'cat < /dev/null > /dev/tcp/proxy/8080' 2>/dev/null; then
+        echo "✓ Proxy is reachable at $HTTP_PROXY"
+        return 0
     else
         echo "WARNING: Unable to reach proxy at $HTTP_PROXY"
         echo "This may cause network issues."
+        return 1
     fi
 }
 
@@ -115,15 +128,15 @@ main() {
     echo ""
     echo "Quick Start Guide:"
     echo "  1. Navigate to workspace: cd workspace"
-    echo "  2. Run Claude: claude 'your task here'"
-    echo "  3. Or enter interactive mode: claude"
+    echo "  2. Install tools: npm install -g @google/gemini-cli"
+    echo "  3. Or: npm install -g @anthropic-ai/claude-code"
     echo ""
     echo "Security Notes:"
     echo "  - All API calls are routed through the proxy"
     echo "  - Real credentials are never stored in this container"
     echo "  - This container can be safely reset at any time"
     echo ""
-    echo "For help, run: claude --help"
+    echo "For help with tools, check their documentation"
     echo "=========================================="
     echo ""
     

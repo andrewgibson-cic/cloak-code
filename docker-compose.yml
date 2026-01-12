@@ -12,45 +12,33 @@ services:
     networks:
       - injector_internal
     ports:
-      # Expose proxy port for debugging/explicit mode (optional, can be removed for pure transparent mode)
       - "8080:8080"
     volumes:
-      # Mount the .env file containing REAL credentials (v1 backward compatibility)
-      # CRITICAL: This file must NEVER be mounted to the agent container
       - ./.env:/app/.env:ro
-      # Mount v2 configuration file (preferred)
       - ./proxy/config.yaml:/app/config.yaml:ro
-      # Mount v1 credentials file (backward compatibility)
       - ./credentials.yml:/app/credentials.yml:ro
-      # Shared certificate volume for MITM trust
       - certs:/certs
     env_file:
-      # Load real credentials from .env file
       - .env
-    # TRANSPARENT MODE REQUIREMENTS
-    privileged: true  # Required for iptables manipulation
-    cap_add:
-      - NET_ADMIN  # Network administration capability
-    command: >
-      sh -c "
-        echo 'Setting up transparent proxy with iptables...' &&
-        iptables -t nat -A OUTPUT 
-          -p tcp 
-          -m owner ! --uid-owner mitmproxy 
-          -m multiport --dports 80,443 
-          -j REDIRECT --to-port 8080 &&
-        echo 'iptables rules configured successfully' &&
-        echo 'Starting Universal Injector v2.0...' &&
-        mitmdump 
-          --mode transparent 
-          --showhost 
-          --set confdir=/certs 
-          --set ssl_insecure=true 
-          --set block_global=false 
-          --listen-host 0.0.0.0 
-          --listen-port 8080 
-          -s /app/inject.py
-      "
+    environment:
+      - LOG_LEVEL=DEBUG
+    command:
+      - mitmdump
+      - --mode
+      - regular
+      - --showhost
+      - --set
+      - confdir=/certs
+      - --set
+      - ssl_insecure=true
+      - --set
+      - block_global=false
+      - --listen-host
+      - 0.0.0.0
+      - --listen-port
+      - "8080"
+      - -s
+      - /app/inject.py
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mitmdump", "--version"]
@@ -67,28 +55,23 @@ services:
         max-file: "3"
 
   # Agent Container - The "Untrusted" Application/Workspace
-  # Can be any application that makes API calls
   agent:
     build:
       context: ./agent
       dockerfile: Dockerfile
     container_name: universal_injector_agent
     hostname: agent
-    # TRANSPARENT MODE: Share network stack with proxy
-    # This makes all agent traffic automatically flow through the proxy
-    network_mode: "service:proxy"
+    networks:
+      - injector_internal
     volumes:
-      # Persistent authentication state (OAuth tokens) - Optional, depends on use case
-      - agent_auth_data:/home/claude/.config/claude-code
-      # Shared certificates for trusting the proxy
+      - agent_auth_data:/home/agent/.config
       - certs:/certs:ro
-      # Bind mount the workspace (project code)
-      # WARNING: Only mount the specific project directory, NOT your entire home folder
-      - ./workspace:/home/claude/workspace
+      - ./workspace:/home/agent/workspace
     environment:
-      # TRANSPARENT MODE: No proxy environment variables needed!
-      # Traffic is automatically intercepted via iptables
-      # HTTP_PROXY and HTTPS_PROXY are NOT set
+      # Explicit proxy mode
+      HTTP_PROXY: "http://proxy:8080"
+      HTTPS_PROXY: "http://proxy:8080"
+      NO_PROXY: "localhost,127.0.0.1"
       
       # Node.js certificate trust
       NODE_EXTRA_CA_CERTS: "/usr/local/share/ca-certificates/mitmproxy-ca-cert.pem"
@@ -97,20 +80,18 @@ services:
       REQUESTS_CA_BUNDLE: "/etc/ssl/certs/ca-certificates.crt"
       SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
       
-      # DUMMY credentials (will be replaced by proxy transparently)
-      # These can also be set in application code - proxy will intercept automatically
+      # DUMMY credentials (will be replaced by proxy)
       OPENAI_API_KEY: "DUMMY_OPENAI_KEY"
       GITHUB_TOKEN: "DUMMY_GITHUB_TOKEN"
       ANTHROPIC_API_KEY: "DUMMY_ANTHROPIC_KEY"
-      # AWS dummy credentials with proper format for SigV4 detection
       AWS_ACCESS_KEY_ID: "AKIA00000000DUMMYKEY"
       AWS_SECRET_ACCESS_KEY: "DUMMY_AWS_SECRET_KEY"
       AWS_DEFAULT_REGION: "us-east-1"
     depends_on:
       proxy:
         condition: service_healthy
-    stdin_open: true  # Enable interactive mode
-    tty: true         # Allocate a pseudo-TTY
+    stdin_open: true
+    tty: true
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "--version"]
@@ -118,9 +99,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-    # Resource limits (optional but recommended)
     deploy:
       resources:
         limits:
@@ -138,16 +116,13 @@ services:
 networks:
   injector_internal:
     driver: bridge
-    internal: false  # Allow external access through proxy
+    internal: false
     ipam:
       config:
         - subnet: 172.28.0.0/16
 
 volumes:
-  # Persistent storage for agent authentication tokens
   agent_auth_data:
     driver: local
-  
-  # Shared volume for proxy-generated certificates
   certs:
     driver: local

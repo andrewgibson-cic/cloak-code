@@ -240,9 +240,9 @@ agent_1  | ✓ Transparent mode configured
 docker-compose ps
 
 # Should show both containers running:
-# NAME                  STATUS
-# safe-claude-proxy-1   Up
-# safe-claude-agent-1   Up
+# NAME                           STATUS
+# universal_injector_proxy       Up
+# universal_injector_agent       Up
 
 # Test the proxy
 docker-compose exec agent curl -v http://httpbin.org/headers

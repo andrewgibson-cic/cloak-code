@@ -4,6 +4,10 @@
 
 FROM mitmproxy/mitmproxy:10.1.1
 
+# Install iptables for transparent proxy mode
+USER root
+RUN apt-get update && apt-get install -y iptables && rm -rf /var/lib/apt/lists/*
+
 # Install additional Python packages for enhanced functionality
 RUN pip install --no-cache-dir \
     python-dotenv==1.0.0 \

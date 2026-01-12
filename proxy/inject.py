@@ -168,7 +168,7 @@ class UniversalInjector:
                     self.strategies.append(strategy)
                     ctx.log.info(f"  ✓ Loaded strategy: {strategy_name} ({strategy_type})")
                 except Exception as e:
-                    ctx.log.error(f"  ✗ Failed to load strategy {strategy_name}: {e}")
+                    ctx.log.warn(f"  ✗ Failed to load strategy {strategy_name}: {e}")
             
             # Load rules
             self.rules = config.get('rules', [])
@@ -352,15 +352,37 @@ class UniversalInjector:
             
             # Check trigger pattern match
             trigger_regex = rule.get('trigger_header_regex')
-            if trigger_regex and not re.search(trigger_regex, auth_header, re.IGNORECASE):
-                continue
-            
-            # Find the strategy
-            strategy_name = rule.get('strategy')
-            for strategy in self.strategies:
-                if strategy.name == strategy_name:
-                    self.logger.debug(f"Rule '{rule_name}' matched, using strategy '{strategy_name}'")
-                    return strategy
+            if trigger_regex:
+                # Check Authorization header
+                if re.search(trigger_regex, auth_header, re.IGNORECASE):
+                    # Find the strategy
+                    strategy_name = rule.get('strategy')
+                    for strategy in self.strategies:
+                        if strategy.name == strategy_name:
+                            self.logger.debug(f"Rule '{rule_name}' matched (header), using strategy '{strategy_name}'")
+                            return strategy
+                
+                # Also check query parameters (for APIs like Gemini that use query params)
+                query = flow.request.query
+                if query:
+                    for key, value in query.items():
+                        if re.search(trigger_regex, value, re.IGNORECASE):
+                            # Find the strategy
+                            strategy_name = rule.get('strategy')
+                            for strategy in self.strategies:
+                                if strategy.name == strategy_name:
+                                    self.logger.debug(f"Rule '{rule_name}' matched (query param), using strategy '{strategy_name}'")
+                                    return strategy
+                
+                # Also check other headers (like x-goog-api-key for Gemini)
+                for header_name, header_value in flow.request.headers.items():
+                    if re.search(trigger_regex, header_value, re.IGNORECASE):
+                        # Find the strategy
+                        strategy_name = rule.get('strategy')
+                        for strategy in self.strategies:
+                            if strategy.name == strategy_name:
+                                self.logger.debug(f"Rule '{rule_name}' matched (header: {header_name}), using strategy '{strategy_name}'")
+                                return strategy
         
         return None
     
@@ -444,9 +466,8 @@ class UniversalInjector:
     def done(self):
         """Called when mitmproxy shuts down. Print statistics."""
         ctx.log.info("=" * 70)
-        ctx.log.info("Universal API Credential Injector v2.0 - Session Statistics")
+        ctx.log.info("Universal API Credential Injector - Session Statistics")
         ctx.log.info("=" * 70)
-        ctx.log.info(f"Configuration Mode: {self.config_mode}")
         ctx.log.info(f"Strategies Loaded: {len(self.strategies)}")
         ctx.log.info(f"Rules Loaded: {len(self.rules)}")
         ctx.log.info("-" * 70)

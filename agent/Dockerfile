@@ -1,5 +1,5 @@
-# SafeClaude Agent Container
-# Provides an isolated, recoverable environment for Claude Code CLI
+# Universal Injector Agent Container
+# Provides an isolated, recoverable environment for AI CLI tools with credential injection
 
 FROM node:20-bookworm
 
@@ -32,30 +32,33 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     net-tools \
     dnsutils \
+    netcat-openbsd \
     # Process management
     procps \
     # Cleanup
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user 'claude' with UID 1000 (matches most Linux host users)
-RUN useradd -m -u 1000 -s /bin/bash claude
+# Create non-root user 'agent'
+# Check if UID 1000 exists, if so use a different UID, otherwise use 1000
+RUN if id -u 1000 >/dev/null 2>&1; then \
+        useradd -m -u 1001 -s /bin/bash agent; \
+    else \
+        useradd -m -u 1000 -s /bin/bash agent; \
+    fi
 
-# Grant passwordless sudo access to claude user
-# This allows the agent to install packages autonomously
+# Grant passwordless sudo access to agent user
+# This allows the agent to install packages and CLI tools autonomously
 RUN apt-get update && apt-get install -y sudo \
-    && echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && echo "agent ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI globally
-RUN npm install -g @anthropic-ai/claude-code@latest
-
 # Create workspace directory
-RUN mkdir -p /home/claude/workspace && chown -R claude:claude /home/claude/workspace
+RUN mkdir -p /home/agent/workspace && chown -R agent:agent /home/agent/workspace
 
-# Create config directory for persistent authentication
-RUN mkdir -p /home/claude/.config/claude-code && chown -R claude:claude /home/claude/.config
+# Create config directory for CLI tools
+RUN mkdir -p /home/agent/.config && chown -R agent:agent /home/agent/.config
 
 # Create certificates directory
 RUN mkdir -p /usr/local/share/ca-certificates && chmod 755 /usr/local/share/ca-certificates
@@ -64,9 +67,9 @@ RUN mkdir -p /usr/local/share/ca-certificates && chmod 755 /usr/local/share/ca-c
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Switch to claude user
-USER claude
-WORKDIR /home/claude
+# Switch to agent user
+USER agent
+WORKDIR /home/agent
 
 # Configure proxy environment variables
 # All traffic will be routed through the secure proxy
