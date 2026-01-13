@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+# Source logging utilities
+if [ -f /usr/local/bin/logging_utils.sh ]; then
+    source /usr/local/bin/logging_utils.sh
+    ensure_log_dir
+    log_container_start
+else
+    echo "Warning: Logging utilities not found"
+fi
+
 echo "=========================================="
 echo "CloakCode Agent Container Starting..."
 echo "=========================================="
@@ -162,8 +171,16 @@ setup_ssh_keys() {
 cleanup_ssh_keys() {
     if [ -d "$HOME/.ssh" ]; then
         echo "Cleaning up SSH keys..."
+        if type log_event >/dev/null 2>&1; then
+            log_event "Cleaning up SSH keys on exit"
+        fi
         rm -rf "$HOME/.ssh"
         echo "✓ SSH keys cleared"
+    fi
+    
+    # Log container stop
+    if type log_container_stop >/dev/null 2>&1; then
+        log_container_stop
     fi
 }
 
@@ -251,6 +268,11 @@ main() {
     fi
     
     echo ""
+    echo "Logging:"
+    echo "  - Activity logs: tail -f ~/logs/agent_activity.log"
+    echo "  - Audit trail: cat ~/logs/audit.json | jq"
+    echo "  - All commands (npm, git, pip) are automatically logged"
+    echo ""
     echo "Security Notes:"
     echo "  - All API calls are routed through the proxy"
     echo "  - Real credentials are never stored in this container"
@@ -260,6 +282,11 @@ main() {
     echo "For help with tools, check their documentation"
     echo "=========================================="
     echo ""
+    
+    # Setup bash history logging for interactive sessions
+    if type setup_bash_history_logging >/dev/null 2>&1; then
+        setup_bash_history_logging
+    fi
     
     # Execute the command passed to the container
     exec "$@"

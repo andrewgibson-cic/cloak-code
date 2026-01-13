@@ -784,19 +784,88 @@ def test_s3_list_buckets():
 
 ---
 
-## 📊 Monitoring & Debugging
+Universal API Credential Injector v2.0 - Session Statistics
+Configuration Mode: v2
+Strategies Loaded: 5
+Rules Loaded: 8
+----------------------------------------------------------------------
+Total Requests Processed: 1,247
+Credentials Injected: 856
+Requests Blocked (Security): 3
+Telemetry Blocked: 12
+Strategy Errors: 0
+```
+## 📊 Monitoring & Logging
 
-### View Logs
+### Persistent Logs
+
+CloakCode v2.0 includes comprehensive persistent logging that survives container restarts and destruction. All logs are stored in the `./logs/` directory on your host machine.
+
+**Log Files:**
+- `agent_activity.log` - Package installations, git operations, command execution
+- `proxy_injections.log` - Credential injection events
+- `security_events.log` - Security blocks, violations
+- `audit.json` - Structured JSON audit trail
+- `.bash_history` - Persistent command history
+
+### View Logs from Host
 
 ```bash
-# Proxy logs
-docker logs universal_injector_proxy
+# View agent activity in real-time
+tail -f logs/agent_activity.log
+
+# Monitor credential injections
+tail -f logs/proxy_injections.log
+
+# Watch for security events
+tail -f logs/security_events.log
+
+# View all logs simultaneously
+tail -f logs/*.log
+
+# Analyze structured audit log with jq
+cat logs/audit.json | jq
+
+# Count successful injections
+grep "Status: SUCCESS" logs/proxy_injections.log | wc -l
+
+# Find all npm installations
+grep "NPM: install" logs/agent_activity.log
+
+# Search for errors
+grep -i "error" logs/*.log
+```
+
+### View Logs from Inside Container
+
+```bash
+# Enter agent container
+docker-compose exec agent bash
+
+# View logs
+tail -f ~/logs/agent_activity.log
+
+# View audit trail
+cat ~/logs/audit.json | jq
+```
+
+### Docker Container Logs
+
+```bash
+# Proxy logs (mitmproxy output)
+docker logs cloakcode_proxy
+
+# Agent logs (container output)
+docker logs cloakcode_agent
+
+# Follow logs
+docker-compose logs -f
 
 # Filter for injections
-docker logs universal_injector_proxy | grep "injected credentials"
+docker logs cloakcode_proxy | grep "credential_injection"
 
-# Filter for blocks
-docker logs universal_injector_proxy | grep "SECURITY"
+# Filter for security blocks
+docker logs cloakcode_proxy | grep "BLOCKED"
 ```
 
 ### Statistics
@@ -804,6 +873,28 @@ docker logs universal_injector_proxy | grep "SECURITY"
 On shutdown, the proxy displays session statistics:
 
 ```
+Universal API Credential Injector v2.0 - Session Statistics
+Configuration Mode: v2
+Strategies Loaded: 5
+Rules Loaded: 8
+----------------------------------------------------------------------
+Total Requests Processed: 1,247
+Credentials Injected: 856
+Requests Blocked (Security): 3
+Telemetry Blocked: 12
+Strategy Errors: 0
+```
+
+### Logging Features
+
+✅ **Persistent** - Survives container destruction and `docker-compose down`  
+✅ **Automatic** - Commands (npm, git, pip, sudo) automatically logged  
+✅ **Structured** - Both human-readable and JSON formats  
+✅ **Comprehensive** - Container lifecycle, injections, security events, errors  
+✅ **Rotated** - Auto-rotation at 50MB with gzip compression  
+✅ **Accessible** - Easy access from host or inside containers  
+
+**For complete logging documentation, see:** [docs/LOGGING.md](docs/LOGGING.md)
 ======================================================================
 Universal API Credential Injector v2.0 - Session Statistics
 ======================================================================

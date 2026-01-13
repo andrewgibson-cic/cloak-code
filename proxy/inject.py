@@ -27,8 +27,10 @@ import sys
 import yaml
 import re
 import logging
+import json
 from typing import Dict, List, Optional, Any
 from pathlib import Path
+from datetime import datetime
 
 from mitmproxy import http, ctx
 from mitmproxy.script import concurrent
@@ -106,6 +108,71 @@ class UniversalInjector:
             format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
         )
         self.logger = logging.getLogger("UniversalInjector")
+        
+        # Setup persistent log files
+        self.log_dir = Path("/logs")
+        self.log_dir.mkdir(exist_ok=True)
+        
+        self.injection_log = self.log_dir / "proxy_injections.log"
+        self.security_log = self.log_dir / "security_events.log"
+        self.audit_log = self.log_dir / "audit.json"
+    
+    def _write_injection_log(self, event_type: str, host: str, strategy: str, status: str, details: str = ""):
+        """Write credential injection event to persistent log."""
+        try:
+            timestamp = datetime.utcnow().isoformat() + "Z"
+            
+            # Plain text log
+            log_line = f"[{timestamp}] {event_type}: {host} | Strategy: {strategy} | Status: {status}"
+            if details:
+                log_line += f" | {details}"
+            
+            with open(self.injection_log, 'a') as f:
+                f.write(log_line + "\n")
+            
+            # JSON audit log
+            audit_entry = {
+                "timestamp": timestamp,
+                "event_type": event_type,
+                "host": host,
+                "strategy": strategy,
+                "status": status,
+                "details": details
+            }
+            
+            with open(self.audit_log, 'a') as f:
+                f.write(json.dumps(audit_entry) + "\n")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to write injection log: {e}")
+    
+    def _write_security_log(self, event_type: str, host: str, action: str, reason: str = ""):
+        """Write security event to persistent log."""
+        try:
+            timestamp = datetime.utcnow().isoformat() + "Z"
+            
+            # Plain text log
+            log_line = f"[{timestamp}] {event_type}: {host} | Action: {action}"
+            if reason:
+                log_line += f" | Reason: {reason}"
+            
+            with open(self.security_log, 'a') as f:
+                f.write(log_line + "\n")
+            
+            # JSON audit log
+            audit_entry = {
+                "timestamp": timestamp,
+                "event_type": event_type,
+                "host": host,
+                "action": action,
+                "reason": reason
+            }
+            
+            with open(self.audit_log, 'a') as f:
+                f.write(json.dumps(audit_entry) + "\n")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to write security log: {e}")
     
     def _load_configuration(self):
         """
@@ -425,6 +492,7 @@ class UniversalInjector:
         # Block telemetry requests
         if self._is_telemetry_request(host):
             ctx.log.info(f"🚫 Blocked telemetry request to: {host}")
+            self._write_security_log("telemetry_blocked", host, "BLOCKED", "Telemetry/analytics endpoint")
             flow.response = http.Response.make(
                 418,  # I'm a teapot
                 b"Telemetry blocked by Universal Injector",
@@ -445,14 +513,17 @@ class UniversalInjector:
         try:
             strategy.inject(flow)
             self.stats["credentials_injected"] += 1
+            self._write_injection_log("credential_injection", host, strategy.name, "SUCCESS")
             
         except Exception as e:
             self.stats["strategy_errors"] += 1
             self.logger.error(f"Strategy {strategy.name} injection failed: {e}")
+            self._write_injection_log("credential_injection", host, strategy.name, "FAILED", str(e))
             
             # Handle based on fail_mode
             if self.fail_mode == "closed":
                 # Fail closed: block the request
+                self._write_security_log("injection_failure", host, "BLOCKED", f"Fail-closed mode: {str(e)}")
                 flow.response = http.Response.make(
                     500,
                     f"Credential injection failed: {str(e)}".encode(),
@@ -462,6 +533,7 @@ class UniversalInjector:
             else:
                 # Fail open: allow request to pass through
                 self.logger.warn(f"Fail-open mode: allowing request to {host} despite injection error")
+                self._write_security_log("injection_failure", host, "ALLOWED", f"Fail-open mode: {str(e)}")
     
     def done(self):
         """Called when mitmproxy shuts down. Print statistics."""

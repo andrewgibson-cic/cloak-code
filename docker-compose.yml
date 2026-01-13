@@ -19,6 +19,8 @@ services:
       - ./proxy/config.yaml:/app/config.yaml:ro
       - ./credentials.yml:/app/credentials.yml:ro
       - cloakcode_certs:/certs
+      # Persistent logs directory
+      - ./logs:/logs:rw
     env_file:
       - .env
     environment:
@@ -72,6 +74,10 @@ services:
       # SSH keys for git operations (if ssh-keys directory exists)
       # Automatically mounted by make install/setup
       - ./ssh-keys:/ssh-keys:ro
+      # Persistent logs directory
+      - ./logs:/home/agent/logs:rw
+      # Logging utilities
+      - ./agent/logging_utils.sh:/usr/local/bin/logging_utils.sh:ro
     environment:
       # Explicit proxy mode
       HTTP_PROXY: "http://proxy:8080"
