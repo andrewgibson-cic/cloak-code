@@ -1,0 +1,153 @@
+{
+  "projectName": "CloakCode - Universal API Credential Injector",
+  "projectType": "Security Infrastructure / Credential Management System",
+  
+  "codingStandards": {
+    "languages": {
+      "python": {
+        "style": "PEP 8",
+        "formatter": "black",
+        "linter": "pylint"
+      },
+      "shell": {
+        "style": "Google Shell Style Guide",
+        "shellcheck": true
+      },
+      "yaml": {
+        "indentation": 2,
+        "quotes": "prefer-double"
+      }
+    },
+    "general": {
+      "maxLineLength": 100,
+      "indentation": "spaces",
+      "indentSize": 4
+    }
+  },
+  
+  "securityGuidelines": {
+    "critical": [
+      "NEVER commit real API credentials to any file",
+      "ALWAYS use DUMMY credentials in code/config examples",
+      "ALWAYS validate that credentials go through proxy, not direct",
+      "Real credentials must ONLY exist in .env file (git-ignored)",
+      "Log credential injection events but NEVER log actual credentials"
+    ],
+    "patterns": {
+      "dummyCredentials": {
+        "aws": "AKIA00000000DUMMYKEY / DUMMY_AWS_SECRET_KEY",
+        "openai": "DUMMY_OPENAI_KEY or sk-proj-[32chars]DUMMY",
+        "anthropic": "DUMMY_ANTHROPIC_KEY or sk-ant-[chars]DUMMY",
+        "github": "DUMMY_GITHUB_TOKEN or ghp_[36chars]DUMMY",
+        "stripe": "sk_test_00000000 or sk_live_00000000"
+      }
+    }
+  },
+  
+  "projectStructure": {
+    "proxy/": "mitmproxy-based credential injection proxy",
+    "agent/": "Isolated container where untrusted code runs",
+    "workspace/": "User workspace for development (mounted volume)",
+    "logs/": "Persistent logging (survives container restarts)",
+    "docs/": "Architecture and implementation documentation",
+    "tests/": "Unit, integration, and security tests",
+    ".devcontainer/": "VS Code remote container configuration"
+  },
+  
+  "keyArchitecturalPrinciples": {
+    "zeroKnowledge": "Agent container never sees real credentials",
+    "transparentProxy": "Credential injection happens automatically",
+    "strategyPattern": "Pluggable authentication protocols (AWS SigV4, Bearer, etc)",
+    "failClosed": "Block requests on error (security over convenience)",
+    "auditLogging": "All credential injections are logged for security audit"
+  },
+  
+  "workflowPreferences": {
+    "beforeMakingChanges": [
+      "Read relevant documentation in docs/ directory",
+      "Check existing tests to understand expected behavior",
+      "Verify changes won't break credential injection flow",
+      "Consider security implications of any modifications"
+    ],
+    "testing": {
+      "runTests": "make test",
+      "unitTests": "pytest tests/unit/",
+      "integrationTests": "pytest tests/integration/",
+      "securityTests": "pytest tests/security/"
+    },
+    "deployment": {
+      "rebuild": "docker-compose down && docker-compose up -d --build",
+      "viewLogs": "docker-compose logs -f",
+      "checkProxy": "docker logs cloakcode_proxy",
+      "checkAgent": "docker logs cloakcode_agent"
+    }
+  },
+  
+  "commonTasks": {
+    "addNewCredentialType": {
+      "files": [
+        "proxy/strategies/<name>.py - Create strategy class",
+        "proxy/config.yaml.example - Add example configuration",
+        ".env.template - Add environment variable template",
+        "docs/ADDING_CREDENTIALS.md - Update documentation"
+      ],
+      "steps": [
+        "1. Create strategy class inheriting from InjectionStrategy",
+        "2. Implement detect() and inject() methods",
+        "3. Register strategy in proxy/inject.py",
+        "4. Add configuration examples",
+        "5. Add tests in tests/unit/test_v2_strategies.py",
+        "6. Update documentation"
+      ]
+    },
+    "addLogging": {
+      "files": [
+        "agent/logging_utils.sh - Bash logging utilities",
+        "logs/ - Persistent log directory"
+      ],
+      "logTypes": {
+        "agent_activity.log": "Package installs, git ops, command execution",
+        "proxy_injections.log": "Credential injection events",
+        "security_events.log": "Security blocks and violations",
+        "audit.json": "Structured JSON audit trail"
+      }
+    }
+  },
+  
+  "clineConfiguration": {
+    "apiProvider": "Use 'Anthropic' or 'OpenAI' or 'OpenAI Compatible'",
+    "apiKey": "ALWAYS use DUMMY credentials (DUMMY_ANTHROPIC_KEY or DUMMY_OPENAI_KEY)",
+    "proxyNote": "The CloakCode proxy will automatically replace dummy keys with real credentials",
+    "verification": "Check logs/proxy_injections.log to see credential replacement in action",
+    "workspace": "/home/agent/workspace - This is your working directory"
+  },
+  
+  "memoryBank": {
+    "enabled": false,
+    "note": "Memory bank is optional. For complex projects, enable by creating memory-bank/ directory with context files"
+  },
+  
+  "importantFiles": {
+    "README.md": "Main project documentation and quick start guide",
+    "docker-compose.yml": "Container orchestration configuration",
+    "proxy/config.yaml": "Credential injection rules and strategies",
+    ".env": "Real credentials (NEVER commit this file)",
+    "agent/entrypoint.sh": "Container initialization and setup",
+    "docs/LOGGING.md": "Comprehensive logging documentation"
+  },
+  
+  "tips": {
+    "development": [
+      "Use 'make install' for initial setup",
+      "Use 'make test' to run all tests",
+      "Check logs/ directory for debugging",
+      "SSH keys are automatically configured for git operations"
+    ],
+    "debugging": [
+      "Enable LOG_LEVEL=DEBUG in .env for verbose logging",
+      "Check docker logs cloakcode_proxy for injection events",
+      "Use tail -f logs/*.log to monitor activity",
+      "Verify proxy connectivity with: docker exec cloakcode_agent curl http://proxy:8080/health"
+    ]
+  }
+}
