@@ -1,5 +1,9 @@
 # Universal API Credential Injector v2.0
 
+> 🔱 **Evolved from [env-sidecar](https://github.com/harryslimes/env-sidecar)**  
+> CloakCode is a complete Python rewrite of the original Go implementation, adding enterprise features like AWS SigV4 support, advanced security, and pluggable authentication strategies. See [HISTORY.md](./HISTORY.md) for the full evolution story.
+
+
 **A transparent, zero-knowledge credential management proxy for secure API access.**
 
 Transform any application into a credential-safe environment where real API keys never touch your code. Supports AWS, Stripe, GitHub, OpenAI, and any HTTP-based API.
