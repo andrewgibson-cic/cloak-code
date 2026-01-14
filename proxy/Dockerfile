@@ -2,7 +2,7 @@
 # Based on mitmproxy for credential injection and traffic inspection
 # v2.0 - Strategy-based architecture with AWS SigV4 support
 
-FROM mitmproxy/mitmproxy:10.1.1
+FROM mitmproxy/mitmproxy:12.2.1
 
 # Install iptables for transparent proxy mode
 USER root
