@@ -130,10 +130,11 @@ class TestSpecializedBearerStrategies(unittest.TestCase):
         os.environ['STRIPE_KEY'] = 'sk_test_real_stripe_key'
         os.environ['GITHUB_TOKEN'] = 'ghp_real_github_token'
         os.environ['OPENAI_KEY'] = 'sk-proj-real_openai_key'
+        os.environ['S2_API_KEY'] = 'real-semantic-scholar-api-key-12345'
     
     def tearDown(self):
         """Clean up environment."""
-        for key in ['STRIPE_KEY', 'GITHUB_TOKEN', 'OPENAI_KEY']:
+        for key in ['STRIPE_KEY', 'GITHUB_TOKEN', 'OPENAI_KEY', 'S2_API_KEY']:
             if key in os.environ:
                 del os.environ[key]
     
@@ -160,6 +161,296 @@ class TestSpecializedBearerStrategies(unittest.TestCase):
         
         self.assertIn('api.openai.com', strategy.allowed_hosts)
         self.assertIn('sk-proj-', strategy.dummy_pattern)
+    
+    def test_semantic_scholar_strategy_initialization(self):
+        """Test Semantic Scholar strategy initializes correctly."""
+        config = {
+            'token': 'S2_API_KEY',
+            'dummy_pattern': 'DUMMY_S2_API_KEY',
+            'allowed_hosts': ['api.semanticscholar.org', '*.semanticscholar.org']
+        }
+        strategy = BearerStrategy('semantic-scholar', config)
+        
+        self.assertEqual(strategy.name, 'semantic-scholar')
+        self.assertEqual(strategy.token, 'real-semantic-scholar-api-key-12345')
+        self.assertIn('api.semanticscholar.org', strategy.allowed_hosts)
+    
+    def test_semantic_scholar_detect_dummy_key(self):
+        """Test Semantic Scholar strategy detects DUMMY_S2_API_KEY."""
+        config = {
+            'token': 'S2_API_KEY',
+            'dummy_pattern': 'DUMMY_S2_API_KEY',
+            'allowed_hosts': ['api.semanticscholar.org']
+        }
+        strategy = BearerStrategy('semantic-scholar', config)
+        
+        # Test with x-api-key header (Semantic Scholar uses this)
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = Mock()
+        mock_flow.request.headers.get = Mock(return_value='Bearer DUMMY_S2_API_KEY')
+        
+        result = strategy.detect(mock_flow)
+        self.assertTrue(result)
+    
+    def test_semantic_scholar_inject_success(self):
+        """Test Semantic Scholar credential injection works correctly."""
+        config = {
+            'token': 'S2_API_KEY',
+            'dummy_pattern': 'DUMMY_S2_API_KEY',
+            'allowed_hosts': ['api.semanticscholar.org', '*.semanticscholar.org']
+        }
+        strategy = BearerStrategy('semantic-scholar', config)
+        
+        # Test injection to api.semanticscholar.org
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = {'Authorization': 'Bearer DUMMY_S2_API_KEY'}
+        mock_flow.request.pretty_host = 'api.semanticscholar.org'
+        
+        strategy.inject(mock_flow)
+        
+        self.assertEqual(
+            mock_flow.request.headers['Authorization'],
+            'Bearer real-semantic-scholar-api-key-12345'
+        )
+    
+    def test_semantic_scholar_wildcard_subdomain(self):
+        """Test Semantic Scholar accepts wildcard subdomains."""
+        config = {
+            'token': 'S2_API_KEY',
+            'dummy_pattern': 'DUMMY_S2_API_KEY',
+            'allowed_hosts': ['*.semanticscholar.org']
+        }
+        strategy = BearerStrategy('semantic-scholar', config)
+        
+        # Test various subdomains
+        test_hosts = [
+            'api.semanticscholar.org',
+            'www.semanticscholar.org',
+            'semanticscholar.org',
+        ]
+        
+        for host in test_hosts:
+            with self.subTest(host=host):
+                mock_flow = Mock()
+                mock_flow.request = Mock()
+                mock_flow.request.headers = {'Authorization': 'Bearer DUMMY_S2_API_KEY'}
+                mock_flow.request.pretty_host = host
+                
+                # Should not raise ValueError
+                strategy.inject(mock_flow)
+                self.assertEqual(
+                    mock_flow.request.headers['Authorization'],
+                    'Bearer real-semantic-scholar-api-key-12345'
+                )
+    
+    def test_semantic_scholar_blocks_unauthorized_host(self):
+        """Test Semantic Scholar blocks requests to non-whitelisted hosts."""
+        config = {
+            'token': 'S2_API_KEY',
+            'dummy_pattern': 'DUMMY_S2_API_KEY',
+            'allowed_hosts': ['api.semanticscholar.org']
+        }
+        strategy = BearerStrategy('semantic-scholar', config)
+        
+        # Try to inject to evil domain
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = {'Authorization': 'Bearer DUMMY_S2_API_KEY'}
+        mock_flow.request.pretty_host = 'evil.com'
+        
+        with self.assertRaises(ValueError) as context:
+            strategy.inject(mock_flow)
+        
+        self.assertIn('not in allowed hosts', str(context.exception))
+        self.assertIn('evil.com', str(context.exception))
+    
+    def test_semantic_scholar_no_detect_real_key(self):
+        """Test Semantic Scholar doesn't detect real API keys."""
+        config = {
+            'token': 'S2_API_KEY',
+            'dummy_pattern': 'DUMMY_S2_API_KEY',
+            'allowed_hosts': ['api.semanticscholar.org']
+        }
+        strategy = BearerStrategy('semantic-scholar', config)
+        
+        # Real-looking key should not be detected
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = Mock()
+        mock_flow.request.headers.get = Mock(
+            return_value='Bearer real-semantic-scholar-key-abc123'
+        )
+        
+        result = strategy.detect(mock_flow)
+        self.assertFalse(result)
+
+
+class TestSlackTokenStrategies(unittest.TestCase):
+    """Test Slack Bot Token and Slack App Token strategies."""
+    
+    def setUp(self):
+        """Set up test environment."""
+        os.environ['SLACK_BOT_TOKEN'] = 'xoxb-real-bot-token-12345'
+        os.environ['SLACK_APP_TOKEN'] = 'xapp-real-app-token-67890'
+    
+    def tearDown(self):
+        """Clean up environment."""
+        for key in ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN']:
+            if key in os.environ:
+                del os.environ[key]
+    
+    def test_slack_bot_token_initialization(self):
+        """Test Slack Bot Token strategy initializes correctly."""
+        config = {
+            'token': 'SLACK_BOT_TOKEN',
+            'dummy_pattern': 'xoxb-DUMMY',
+            'allowed_hosts': ['slack.com', '*.slack.com']
+        }
+        strategy = BearerStrategy('slack-bot', config)
+        
+        self.assertEqual(strategy.name, 'slack-bot')
+        self.assertEqual(strategy.token, 'xoxb-real-bot-token-12345')
+        self.assertIn('slack.com', strategy.allowed_hosts)
+    
+    def test_slack_app_token_initialization(self):
+        """Test Slack App Token strategy initializes correctly."""
+        config = {
+            'token': 'SLACK_APP_TOKEN',
+            'dummy_pattern': 'xapp-DUMMY',
+            'allowed_hosts': ['slack.com', '*.slack.com']
+        }
+        strategy = BearerStrategy('slack-app', config)
+        
+        self.assertEqual(strategy.name, 'slack-app')
+        self.assertEqual(strategy.token, 'xapp-real-app-token-67890')
+        self.assertIn('slack.com', strategy.allowed_hosts)
+    
+    def test_slack_bot_token_detect(self):
+        """Test Slack Bot Token strategy detects xoxb-DUMMY."""
+        config = {
+            'token': 'SLACK_BOT_TOKEN',
+            'dummy_pattern': 'xoxb-DUMMY',
+            'allowed_hosts': ['slack.com']
+        }
+        strategy = BearerStrategy('slack-bot', config)
+        
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = Mock()
+        mock_flow.request.headers.get = Mock(return_value='Bearer xoxb-DUMMY')
+        
+        result = strategy.detect(mock_flow)
+        self.assertTrue(result)
+    
+    def test_slack_app_token_detect(self):
+        """Test Slack App Token strategy detects xapp-DUMMY."""
+        config = {
+            'token': 'SLACK_APP_TOKEN',
+            'dummy_pattern': 'xapp-DUMMY',
+            'allowed_hosts': ['slack.com']
+        }
+        strategy = BearerStrategy('slack-app', config)
+        
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = Mock()
+        mock_flow.request.headers.get = Mock(return_value='Bearer xapp-DUMMY')
+        
+        result = strategy.detect(mock_flow)
+        self.assertTrue(result)
+    
+    def test_slack_bot_token_inject(self):
+        """Test Slack Bot Token injection works correctly."""
+        config = {
+            'token': 'SLACK_BOT_TOKEN',
+            'dummy_pattern': 'xoxb-DUMMY',
+            'allowed_hosts': ['slack.com', '*.slack.com']
+        }
+        strategy = BearerStrategy('slack-bot', config)
+        
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = {'Authorization': 'Bearer xoxb-DUMMY'}
+        mock_flow.request.pretty_host = 'api.slack.com'
+        
+        strategy.inject(mock_flow)
+        
+        self.assertEqual(
+            mock_flow.request.headers['Authorization'],
+            'Bearer xoxb-real-bot-token-12345'
+        )
+    
+    def test_slack_app_token_inject(self):
+        """Test Slack App Token injection works correctly."""
+        config = {
+            'token': 'SLACK_APP_TOKEN',
+            'dummy_pattern': 'xapp-DUMMY',
+            'allowed_hosts': ['slack.com', '*.slack.com']
+        }
+        strategy = BearerStrategy('slack-app', config)
+        
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = {'Authorization': 'Bearer xapp-DUMMY'}
+        mock_flow.request.pretty_host = 'wss-primary.slack.com'
+        
+        strategy.inject(mock_flow)
+        
+        self.assertEqual(
+            mock_flow.request.headers['Authorization'],
+            'Bearer xapp-real-app-token-67890'
+        )
+    
+    def test_slack_tokens_no_cross_detection(self):
+        """Test Bot Token strategy doesn't detect App Token and vice versa."""
+        bot_config = {
+            'token': 'SLACK_BOT_TOKEN',
+            'dummy_pattern': 'xoxb-DUMMY',
+            'allowed_hosts': ['slack.com']
+        }
+        app_config = {
+            'token': 'SLACK_APP_TOKEN',
+            'dummy_pattern': 'xapp-DUMMY',
+            'allowed_hosts': ['slack.com']
+        }
+        
+        bot_strategy = BearerStrategy('slack-bot', bot_config)
+        app_strategy = BearerStrategy('slack-app', app_config)
+        
+        # Bot strategy should not detect app dummy token
+        mock_flow_app = Mock()
+        mock_flow_app.request = Mock()
+        mock_flow_app.request.headers = Mock()
+        mock_flow_app.request.headers.get = Mock(return_value='Bearer xapp-DUMMY')
+        self.assertFalse(bot_strategy.detect(mock_flow_app))
+        
+        # App strategy should not detect bot dummy token
+        mock_flow_bot = Mock()
+        mock_flow_bot.request = Mock()
+        mock_flow_bot.request.headers = Mock()
+        mock_flow_bot.request.headers.get = Mock(return_value='Bearer xoxb-DUMMY')
+        self.assertFalse(app_strategy.detect(mock_flow_bot))
+    
+    def test_slack_blocks_unauthorized_host(self):
+        """Test Slack strategies block requests to non-Slack hosts."""
+        config = {
+            'token': 'SLACK_BOT_TOKEN',
+            'dummy_pattern': 'xoxb-DUMMY',
+            'allowed_hosts': ['slack.com', '*.slack.com']
+        }
+        strategy = BearerStrategy('slack-bot', config)
+        
+        mock_flow = Mock()
+        mock_flow.request = Mock()
+        mock_flow.request.headers = {'Authorization': 'Bearer xoxb-DUMMY'}
+        mock_flow.request.pretty_host = 'evil.com'
+        
+        with self.assertRaises(ValueError) as context:
+            strategy.inject(mock_flow)
+        
+        self.assertIn('not in allowed hosts', str(context.exception))
 
 
 class TestAWSSigV4Strategy(unittest.TestCase):

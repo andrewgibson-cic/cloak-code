@@ -53,6 +53,36 @@ strategies:
     config:
       api_key: GEMINI_API_KEY  # Read from env var
   
+  # Semantic Scholar API Strategy
+  - name: semantic-scholar
+    type: bearer
+    config:
+      token: S2_API_KEY  # Read from env var
+      dummy_pattern: "DUMMY_S2_API_KEY"
+      allowed_hosts:
+        - "api.semanticscholar.org"
+        - "*.semanticscholar.org"
+  
+  # Slack Bot Token API Strategy
+  - name: slack-bot
+    type: bearer
+    config:
+      token: SLACK_BOT_TOKEN
+      dummy_pattern: "xoxb-DUMMY"
+      allowed_hosts:
+        - "slack.com"
+        - "*.slack.com"
+  
+  # Slack App Token API Strategy
+  - name: slack-app
+    type: bearer
+    config:
+      token: SLACK_APP_TOKEN
+      dummy_pattern: "xapp-DUMMY"
+      allowed_hosts:
+        - "slack.com"
+        - "*.slack.com"
+  
   # Generic Bearer Token Strategy Example
   - name: custom-api
     type: bearer
@@ -109,6 +139,27 @@ rules:
     domain_regex: "^(.*\\.)?googleapis\\.com$"
     trigger_header_regex: "(AIza[a-zA-Z0-9_-]{35}DUMMY|DUMMY_GEMINI_KEY)"
     strategy: gemini
+    priority: 100
+  
+  # Semantic Scholar Rule
+  - name: semantic-scholar-injection
+    domain_regex: "^(.*\\.)?semanticscholar\\.org$"
+    trigger_header_regex: "DUMMY_S2_API_KEY"
+    strategy: semantic-scholar
+    priority: 100
+  
+  # Slack Bot Token Rule
+  - name: slack-bot-injection
+    domain_regex: "^(.*\\.)?slack\\.com$"
+    trigger_header_regex: "xoxb-DUMMY"
+    strategy: slack-bot
+    priority: 100
+  
+  # Slack App Token Rule
+  - name: slack-app-injection
+    domain_regex: "^(.*\\.)?slack\\.com$"
+    trigger_header_regex: "xapp-DUMMY"
+    strategy: slack-app
     priority: 100
 
 # Global Settings

@@ -1,6 +1,6 @@
-# Slack Bot Token Setup Guide
+# Slack Token Setup Guide
 
-This guide walks you through creating a Slack app and obtaining a bot token for use with CloakCode.
+This guide walks you through creating a Slack app and obtaining tokens (Bot Token & App Token) for use with CloakCode.
 
 ---
 
@@ -9,9 +9,10 @@ This guide walks you through creating a Slack app and obtaining a bot token for 
 To use Slack API with CloakCode, you need:
 1. A Slack workspace where you have admin permissions
 2. A Slack app with bot capabilities
-3. A bot token (starts with `xoxb-`)
+3. **Bot Token** (starts with `xoxb-`) - for API calls
+4. **App Token** (starts with `xapp-`) - for Socket Mode (optional)
 
-**Time required:** ~10 minutes
+**Time required:** ~10-15 minutes
 
 ---
 
@@ -225,6 +226,136 @@ tail -f logs/proxy_injections.log
 #   Trigger: xoxb-DUMMY detected
 #   Strategy: slack
 #   Status: SUCCESS
+```
+
+---
+
+## Slack App Token (Socket Mode)
+
+### What is an App Token?
+
+An **App Token** (starts with `xapp-`) is required for:
+- **Socket Mode** - Real-time events without a public endpoint
+- **App-level operations** - Managing the app itself
+- **WebSocket connections** - Persistent connections to Slack
+
+### When Do You Need It?
+
+You need an App Token if you want to:
+- Use Socket Mode instead of HTTP webhooks
+- Receive real-time events without exposing a public URL
+- Build apps that work behind firewalls
+- Develop locally without ngrok/tunnels
+
+### Step-by-Step: Get App Token
+
+1. Go to your app in Slack API dashboard
+2. Click **"Basic Information"** in sidebar
+3. Scroll down to **"App-Level Tokens"**
+4. Click **"Generate Token and Scopes"**
+5. Enter token name: e.g., "Socket Mode Token"
+6. Add scopes:
+   - `connections:write` - Required for Socket Mode
+   - `authorizations:read` - Optional, for app info
+7. Click **"Generate"**
+8. Copy the token (starts with `xapp-`)
+
+### Add App Token to CloakCode
+
+```bash
+# Edit .env file
+nano .env
+
+# Add both tokens:
+SLACK_BOT_TOKEN=xoxb-your-bot-token-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+```
+
+### Configure for Socket Mode
+
+```yaml
+strategies:
+  # Bot Token for API calls
+  - name: slack-bot
+    type: bearer
+    config:
+      token: SLACK_BOT_TOKEN
+      dummy_pattern: "xoxb-DUMMY"
+      allowed_hosts:
+        - "slack.com"
+        - "*.slack.com"
+  
+  # App Token for Socket Mode
+  - name: slack-app
+    type: bearer
+    config:
+      token: SLACK_APP_TOKEN
+      dummy_pattern: "xapp-DUMMY"
+      allowed_hosts:
+        - "slack.com"
+        - "*.slack.com"
+
+rules:
+  # Bot Token injection
+  - name: slack-bot-injection
+    domain_regex: "^(.*\\.)?slack\\.com$"
+    trigger_header_regex: "xoxb-DUMMY"
+    strategy: slack-bot
+    priority: 100
+  
+  # App Token injection
+  - name: slack-app-injection
+    domain_regex: "^(.*\\.)?slack\\.com$"
+    trigger_header_regex: "xapp-DUMMY"
+    strategy: slack-app
+    priority: 100
+```
+
+### Enable Socket Mode
+
+1. Go to **"Socket Mode"** in sidebar
+2. Toggle **"Enable Socket Mode"** to On
+3. Select your App-Level Token
+4. Click **"Save Changes"**
+
+### Socket Mode Example (Python)
+
+```python
+from slack_bolt import App
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+
+# Use dummy tokens - CloakCode injects real ones
+app = App(token="xoxb-DUMMY")
+
+@app.message("hello")
+def message_hello(message, say):
+    say(f"Hey there <@{message['user']}>!")
+
+# Start Socket Mode
+handler = SocketModeHandler(app, "xapp-DUMMY")
+handler.start()
+```
+
+### Socket Mode Example (Node.js)
+
+```javascript
+const { App } = require('@slack/bolt');
+
+// Use dummy tokens - CloakCode injects real ones
+const app = new App({
+  token: 'xoxb-DUMMY',
+  appToken: 'xapp-DUMMY',
+  socketMode: true
+});
+
+app.message('hello', async ({ message, say }) => {
+  await say(`Hey there <@${message.user}>!`);
+});
+
+(async () => {
+  await app.start();
+  console.log('⚡️ Bolt app is running!');
+})();
 ```
 
 ---
