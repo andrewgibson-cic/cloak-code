@@ -1,0 +1,323 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  validate-commits:
+    name: Validate Commit Messages
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          echo "Checking commit messages for conventional commit format..."
+          
+          # Get commits in this PR
+          git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s" > commits.txt
+          
+          VALID=true
+          while IFS= read -r commit; do
+            # Check if commit follows conventional commit format (loose check)
+            if [[ ! "$commit" =~ ^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?:\ .+ ]] && \
+               [[ ! "$commit" =~ ^Merge\ (branch|pull\ request) ]] && \
+               [[ ! "$commit" =~ ^Revert ]]; then
+              echo "⚠️  Non-conventional commit: $commit"
+              VALID=false
+            else
+              echo "✅ Valid commit: $commit"
+            fi
+          done < commits.txt
+          
+          if [ "$VALID" = false ]; then
+            echo ""
+            echo "❌ Some commits don't follow conventional commit format."
+            echo "Conventional format: type(scope): description"
+            echo "Examples:"
+            echo "  feat: add new authentication strategy"
+            echo "  fix: resolve credential injection bug"
+            echo "  docs: update README with examples"
+            echo ""
+            echo "This is a warning, not a failure. Consider using conventional commits for better release notes."
+          fi
+
+  lint-and-format:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install black pylint flake8 yamllint shellcheck-py
+
+      - name: Check Python formatting with Black
+        run: |
+          echo "Checking Python code formatting..."
+          black --check --line-length 100 proxy/ tests/ || {
+            echo "❌ Python code needs formatting. Run: black --line-length 100 proxy/ tests/"
+            exit 1
+          }
+
+      - name: Lint Python with Flake8
+        run: |
+          echo "Linting Python code with Flake8..."
+          flake8 proxy/ tests/ --max-line-length=100 --extend-ignore=E203,W503 || true
+
+      - name: Lint Python with Pylint
+        run: |
+          echo "Linting Python code with Pylint..."
+          pylint proxy/ --max-line-length=100 --disable=C0111,R0903,R0913 || true
+        continue-on-error: true
+
+      - name: Lint YAML files
+        run: |
+          echo "Linting YAML files..."
+          yamllint -d "{extends: default, rules: {line-length: {max: 120}, document-start: disable}}" \
+            .github/workflows/ docker-compose.yml proxy/config.yaml.example || true
+        continue-on-error: true
+
+      - name: Lint Shell scripts
+        run: |
+          echo "Linting shell scripts..."
+          find . -name "*.sh" -type f -exec shellcheck {} \; || true
+        continue-on-error: true
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-xdist
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
+          fi
+
+      - name: Run unit tests
+        run: |
+          if [ -d tests/unit ]; then
+            pytest tests/unit/ -v --cov=proxy --cov-report=xml --cov-report=term
+          else
+            echo "No unit tests found"
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+        continue-on-error: true
+
+  test-docker-build:
+    name: Test Docker Builds
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Proxy Image
+        run: |
+          echo "Building proxy image..."
+          docker build -t cloakcode-proxy:pr-${{ github.event.pull_request.number }} ./proxy
+
+      - name: Build Agent Image
+        run: |
+          echo "Building agent image..."
+          docker build -t cloakcode-agent:pr-${{ github.event.pull_request.number }} ./agent
+
+      - name: Test Proxy Image
+        run: |
+          echo "Testing proxy image..."
+          docker run --rm cloakcode-proxy:pr-${{ github.event.pull_request.number }} mitmdump --version
+
+      - name: Test Agent Image
+        run: |
+          echo "Testing agent image..."
+          docker run --rm cloakcode-agent:pr-${{ github.event.pull_request.number }} node --version
+          docker run --rm cloakcode-agent:pr-${{ github.event.pull_request.number }} python3 --version
+
+      - name: Check image sizes
+        run: |
+          echo "## 📦 Docker Image Sizes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|" >> $GITHUB_STEP_SUMMARY
+          
+          PROXY_SIZE=$(docker images cloakcode-proxy:pr-${{ github.event.pull_request.number }} --format "{{.Size}}")
+          AGENT_SIZE=$(docker images cloakcode-agent:pr-${{ github.event.pull_request.number }} --format "{{.Size}}")
+          
+          echo "| Proxy | $PROXY_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent | $AGENT_SIZE |" >> $GITHUB_STEP_SUMMARY
+
+  security-quick-scan:
+    name: Quick Security Scan
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Check for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check-documentation:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for documentation updates
+        run: |
+          # Get changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          # Check if code files were changed
+          CODE_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE '\.(py|sh|yml|yaml)$'; then
+            CODE_CHANGED=true
+          fi
+          
+          # Check if docs were updated
+          DOCS_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE '^docs/|\.md$'; then
+            DOCS_CHANGED=true
+          fi
+          
+          if [ "$CODE_CHANGED" = true ] && [ "$DOCS_CHANGED" = false ]; then
+            echo "⚠️  Code changes detected but no documentation updates found."
+            echo "Consider updating documentation if this PR adds new features or changes behavior."
+            echo ""
+            echo "This is just a reminder, not a requirement."
+          else
+            echo "✅ Documentation check passed"
+          fi
+
+  pr-summary:
+    name: PR Validation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-commits, lint-and-format, test-unit, test-docker-build, security-quick-scan, check-documentation]
+    if: always() && github.event.pull_request.draft == false
+    
+    steps:
+      - name: Generate PR summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # ✅ Pull Request Validation Results
+          
+          ## Test Results
+          
+          | Check | Status |
+          |-------|--------|
+          | Commit Messages | ${{ needs.validate-commits.result }} |
+          | Lint & Format | ${{ needs.lint-and-format.result }} |
+          | Unit Tests | ${{ needs.test-unit.result }} |
+          | Docker Builds | ${{ needs.test-docker-build.result }} |
+          | Security Scan | ${{ needs.security-quick-scan.result }} |
+          | Documentation | ${{ needs.check-documentation.result }} |
+          
+          ## Next Steps
+          
+          - Review test results above
+          - Address any failing checks
+          - Request review when ready
+          EOF
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const results = {
+              commits: '${{ needs.validate-commits.result }}',
+              lint: '${{ needs.lint-and-format.result }}',
+              tests: '${{ needs.test-unit.result }}',
+              docker: '${{ needs.test-docker-build.result }}',
+              security: '${{ needs.security-quick-scan.result }}',
+              docs: '${{ needs.check-documentation.result }}'
+            };
+            
+            const emoji = (status) => {
+              if (status === 'success') return '✅';
+              if (status === 'failure') return '❌';
+              return '⚠️';
+            };
+            
+            const summary = `## 🔍 Pull Request Validation
+            
+            | Check | Status |
+            |-------|--------|
+            | ${emoji(results.commits)} Commit Messages | ${results.commits} |
+            | ${emoji(results.lint)} Lint & Format | ${results.lint} |
+            | ${emoji(results.tests)} Unit Tests | ${results.tests} |
+            | ${emoji(results.docker)} Docker Builds | ${results.docker} |
+            | ${emoji(results.security)} Security Scan | ${results.security} |
+            | ${emoji(results.docs)} Documentation | ${results.docs} |
+            
+            [View detailed results →](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

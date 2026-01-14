@@ -119,7 +119,7 @@ After installation, you'll see two tokens:
 
 **Bot User OAuth Token** (starts with `xoxb-`)
 ```
-xoxb-1234567890123-1234567890123-abcdefghijklmnopqrstuvwx
+xoxb-1234567890-1234567890-EXAMPLE-DUMMY-TOKEN-NOT-REAL
 ```
 
 **User OAuth Token** (starts with `xoxp-`)
