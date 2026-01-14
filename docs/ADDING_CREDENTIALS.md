@@ -1,6 +1,6 @@
-# Adding New API Credentials to SafeClaude
+# Adding New API Credentials to CloakCode
 
-SafeClaude now supports **ANY API credential** through its universal configuration system! This guide shows you how to add support for new APIs like Binance, eBay, Shopify, Coinbase, or literally any service.
+CloakCode now supports **ANY API credential** through its universal configuration system! This guide shows you how to add support for new APIs like Binance, eBay, Shopify, Coinbase, or literally any service.
 
 ## 🎯 Overview
 

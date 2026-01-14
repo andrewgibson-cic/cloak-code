@@ -1,4 +1,4 @@
-# Development and Testing Dependencies for SafeClaude
+# Development and Testing Dependencies for CloakCode
 
 # Testing Framework
 pytest==7.4.3

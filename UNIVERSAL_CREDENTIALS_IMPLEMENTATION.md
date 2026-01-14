@@ -2,7 +2,7 @@
 
 ## Overview
 
-SafeClaude has been upgraded from a **hardcoded credential system** to a **universal, configuration-driven architecture** that supports ANY API credential without code modifications.
+CloakCode has been upgraded from a **hardcoded credential system** to a **universal, configuration-driven architecture** that supports ANY API credential without code modifications.
 
 ## What Changed
 
@@ -54,7 +54,7 @@ credentials:
 
 ### File Structure
 ```
-safe-claude/
+cloak-code/
 ├── credentials.yml          # NEW: Service definitions (non-sensitive)
 ├── .env                     # Secrets (existing, enhanced)
 ├── .env.template           # Enhanced with examples
@@ -198,7 +198,7 @@ The wizard generates the configuration for you!
 Output:
 ```
 ╔════════════════════════════════════════════════════════════╗
-║   SafeClaude - Configured API Credentials                 ║
+║   CloakCode - Configured API Credentials                 ║
 ╚════════════════════════════════════════════════════════════╝
 
 Configured Services:
@@ -386,7 +386,7 @@ docker-compose logs -f proxy
 
 ## Conclusion
 
-The universal credential system transforms SafeClaude from a **fixed-service** tool to a **truly universal** API credential manager. Users can now:
+The universal credential system transforms CloakCode from a **fixed-service** tool to a **truly universal** API credential manager. Users can now:
 
 - Add support for ANY API in minutes
 - No programming knowledge required
@@ -394,7 +394,7 @@ The universal credential system transforms SafeClaude from a **fixed-service** t
 - Use CLI tools for easy management
 - Scale to unlimited services
 
-This makes SafeClaude suitable for:
+This makes CloakCode suitable for:
 - 🏢 Enterprise environments with custom APIs
 - 🔗 Integration testing across many services
 - 💼 Trading bots using multiple exchanges

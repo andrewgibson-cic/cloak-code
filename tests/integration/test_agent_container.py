@@ -22,7 +22,7 @@ class TestAgentContainer(unittest.TestCase):
     def setUpClass(cls):
         """Ensure containers are running before tests."""
         print("\n=== Setting up test environment ===")
-        subprocess.run(["docker-compose", "up", "-d"], check=True, cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude")
+        subprocess.run(["docker-compose", "up", "-d"], check=True, cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code")
         # Wait for containers to be healthy
         time.sleep(15)
         print("Containers started\n")
@@ -33,7 +33,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "ps", "--format", "json"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "docker-compose ps should succeed")
         self.assertIn("universal_injector_proxy", result.stdout)
@@ -45,7 +45,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "which", "claude-code"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         # Should exit with non-zero (command not found)
         self.assertNotEqual(result.returncode, 0, "claude-code should not be pre-installed")
@@ -56,7 +56,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "which", "gemini"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         # Should exit with non-zero (command not found)
         self.assertNotEqual(result.returncode, 0, "gemini should not be pre-installed")
@@ -68,7 +68,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "node", "--version"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "node should be available")
         self.assertTrue(result.stdout.startswith("v"), "node version should start with 'v'")
@@ -78,7 +78,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "npm", "--version"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "npm should be available")
 
@@ -89,7 +89,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "python3", "--version"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "python3 should be available")
         self.assertIn("Python", result.stdout, "python version should contain 'Python'")
@@ -99,7 +99,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "pip3", "--version"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "pip3 should be available")
 
@@ -109,7 +109,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "sudo", "-n", "echo", "test"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "sudo should work without password")
         self.assertIn("test", result.stdout)
@@ -120,7 +120,7 @@ class TestAgentContainer(unittest.TestCase):
         result = subprocess.run(
             ["docker-compose", "exec", "-T", "agent", "test", "-f", "/usr/local/share/ca-certificates/mitmproxy-ca-cert.crt"],
             capture_output=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "System certificate (.crt) should exist")
         
@@ -128,7 +128,7 @@ class TestAgentContainer(unittest.TestCase):
         result = subprocess.run(
             ["docker-compose", "exec", "-T", "agent", "test", "-f", "/usr/local/share/ca-certificates/mitmproxy-ca-cert.pem"],
             capture_output=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "Node.js certificate (.pem) should exist")
 
@@ -138,7 +138,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "env"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0)
         self.assertIn("HTTP_PROXY=http://proxy:8080", result.stdout)
@@ -151,7 +151,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "nc", "-z", "-w5", "proxy", "8080"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertEqual(result.returncode, 0, "Proxy port should be reachable")
 
@@ -162,7 +162,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "sudo", "npm", "install", "-g", "is-even"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude",
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code",
             timeout=60
         )
         self.assertEqual(result.returncode, 0, "npm install should succeed with sudo")
@@ -173,7 +173,7 @@ class TestAgentContainer(unittest.TestCase):
             ["docker-compose", "exec", "-T", "agent", "npm", "list", "-g", "is-even"],
             capture_output=True,
             text=True,
-            cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+            cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
         )
         self.assertIn("is-even", result.stdout, "Package should be installed")
 
@@ -247,7 +247,7 @@ class TestNetworkConfiguration(unittest.TestCase):
     def test_01_containers_on_same_network(self):
         """Verify agent and proxy are on the same Docker network."""
         result = subprocess.run(
-            ["docker", "network", "inspect", "safe-claude_injector_internal", "--format", "{{range .Containers}}{{.Name}} {{end}}"],
+            ["docker", "network", "inspect", "cloak-code_injector_internal", "--format", "{{range .Containers}}{{.Name}} {{end}}"],
             capture_output=True,
             text=True
         )

@@ -95,7 +95,7 @@ Before you begin, ensure you have:
 
 ```bash
 git clone <repository-url>
-cd safe-claude
+cd cloak-code
 ```
 
 ### Step 2: Copy Configuration Templates
@@ -919,7 +919,7 @@ Strategy Errors: 0
 ```bash
 # Regenerate certificates
 docker-compose down
-docker volume rm safe-claude_certs
+docker volume rm cloak-code_certs
 docker-compose up -d
 ```
 
@@ -962,7 +962,7 @@ curl -v https://api.github.com
 
 ### v1 Documentation (Archived)
 
-- [v1 SafeClaude Docs](./docs/archive/v1-safeclaude/)
+- [v1 CloakCode Docs](./docs/archive/v1-safeclaude/)
 
 ---
 
@@ -1026,7 +1026,7 @@ While Universal Injector v2 implements strong security controls, consider these 
 
 ## 📞 Support
 
-- **GitHub Issues**: [Report bugs or request features](https://github.ibm.com/Andrew-Gibson-CIC/safe-claude/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.ibm.com/Andrew-Gibson-CIC/cloak-code/issues)
 - **Documentation**: See `/docs` directory
 - **Security**: Report security issues privately to maintainers
 

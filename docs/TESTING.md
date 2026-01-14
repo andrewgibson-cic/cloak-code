@@ -220,7 +220,7 @@ To add new tests:
            ["docker-compose", "exec", "-T", "agent", "command"],
            capture_output=True,
            text=True,
-           cwd="/Users/andrewgibson/Documents/NodeProjects/safe-claude"
+           cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
        )
        self.assertEqual(result.returncode, 0, "Should succeed")
    ```

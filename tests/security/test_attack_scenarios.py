@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Security Penetration Tests for SafeClaude
+Security Penetration Tests for CloakCode
 
 Tests various attack scenarios to validate the security model,
 including credential exfiltration attempts, prompt injection,

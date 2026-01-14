@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unit Tests for SafeClaude Proxy Credential Injection Logic
+Unit Tests for CloakCode Proxy Credential Injection Logic
 
 Tests the core security functionality of the credential injection system
 without requiring actual network requests or Docker containers.

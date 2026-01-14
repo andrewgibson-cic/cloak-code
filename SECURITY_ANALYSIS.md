@@ -1,6 +1,6 @@
 # Static Security Analysis Report
 
-**Project:** SafeClaude  
+**Project:** CloakCode  
 **Date:** January 10, 2026  
 **Analyst:** Automated Security Scanning + Manual Review
 
@@ -399,7 +399,7 @@ black --check proxy/
 
 **Overall Security Score: A- (Strong)**
 
-The SafeClaude system demonstrates **strong security posture** with well-implemented controls. Static analysis reveals no critical vulnerabilities, and dependency scanning shows all components are current and patched.
+The CloakCode system demonstrates **strong security posture** with well-implemented controls. Static analysis reveals no critical vulnerabilities, and dependency scanning shows all components are current and patched.
 
 ### Strengths
 - Zero-knowledge architecture properly implemented
