@@ -1,42 +1,117 @@
 {
-  "name": "Env-Sidecar Dev (Transparent Proxy)",
-  "build": {
-    "dockerfile": "../Dockerfile"
-  },
-  "runArgs": [
-    "--gpus", "all",
-    "--shm-size=8g",
-    "--env-file", ".devcontainer/.env",
-    "--network", "sidecar-network"
-  ],
-  "containerEnv": {
-    "http_proxy": "http://env-sidecar:8888",
-    "https_proxy": "http://env-sidecar:8888",
-    "no_proxy": "localhost,127.0.0.1,env-sidecar"
-  },
+  "name": "CloakCode Agent with Cline",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "agent",
+  "workspaceFolder": "/home/agent/workspace",
+  
+  // Wait for the agent container to be fully ready
+  "waitFor": "onCreateCommand",
+  "updateContentCommand": "echo 'Container updated'",
+  "postCreateCommand": "echo 'Welcome to CloakCode Agent with Cline!'",
+  
+  // Configure the remote user
+  "remoteUser": "agent",
+  "containerUser": "agent",
+  
+  // Extensions to install in the container
   "customizations": {
     "vscode": {
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "go.toolsManagement.checkForUpdates": "local",
-        "go.useLanguageServer": true
-      },
       "extensions": [
+        // Cline - AI coding assistant
+        "saoudrizwan.claude-dev",
+        
+        // Useful additional extensions
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
         "ms-python.python",
-        "ms-toolsai.jupyter",
-        "Anthropic.claude-code",
-        "golang.Go"
-      ]
+        "ms-python.vscode-pylance",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker"
+      ],
+      
+      "settings": {
+        // Terminal settings
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "icon": "terminal-bash"
+          }
+        },
+        
+        // File associations
+        "files.associations": {
+          "*.sh": "shellscript",
+          ".clinerules": "json",
+          "Dockerfile*": "dockerfile"
+        },
+        
+        // Git settings
+        "git.enableSmartCommit": true,
+        "git.confirmSync": false,
+        
+        // Python settings
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        
+        // Format on save
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        
+        // Exclude patterns for file watcher
+        "files.watcherExclude": {
+          "**/node_modules/**": true,
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true,
+          "**/logs/**": true
+        },
+        
+        // Show hidden files
+        "files.exclude": {
+          "**/.git": false
+        }
+      }
     }
   },
-  "mounts": [
-    "source=claude-config,target=/home/vscode/.config/claude,type=volume",
-    "source=hf-cache,target=/home/vscode/.cache/huggingface,type=volume",
-    "source=project-bashhistory,target=/home/vscode/commandhistory,type=volume"
+  
+  // Forward ports for debugging/development
+  "forwardPorts": [
+    3000,  // Common dev server port
+    8000,  // Alternative dev server port
+    8080,  // Proxy port (for monitoring)
+    5000   // Flask/Python default
   ],
-  "remoteEnv": {
-    "HISTFILE": "/home/vscode/commandhistory/.bash_history",
-    "CLAUDE_CONFIG_DIR": "/home/vscode/.config/claude"
+  
+  "portsAttributes": {
+    "8080": {
+      "label": "CloakCode Proxy",
+      "onAutoForward": "silent"
+    }
   },
-  "postCreateCommand": "bash .devcontainer/setup-cert.sh"
+  
+  // Mount additional volumes
+  "mounts": [
+    // Ensure logs are accessible
+    "source=${localWorkspaceFolder}/logs,target=/home/agent/logs,type=bind,consistency=cached"
+  ],
+  
+  // Features to add to the container
+  "features": {
+    // Git (should already be installed, but ensures latest)
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+  
+  // Lifecycle scripts
+  "onCreateCommand": {
+    "welcome": "cat << 'EOF'\n╔════════════════════════════════════════════════════════════╗\n║     CloakCode Agent Container with Cline Integration      ║\n║                                                            ║\n║  • All API calls are routed through the secure proxy      ║\n║  • Real credentials are never exposed to this container   ║\n║  • Use DUMMY credentials in Cline configuration           ║\n║  • Check logs/proxy_injections.log to verify injection    ║\n║                                                            ║\n║  Quick Start:                                              ║\n║  1. Open Cline from the sidebar (Claude icon)             ║\n║  2. Configure with DUMMY_ANTHROPIC_KEY or DUMMY_OPENAI_KEY║\n║  3. Start coding with AI assistance!                      ║\n╚════════════════════════════════════════════════════════════╝\nEOF"
+  },
+  
+  // Environment variables specific to VS Code remote session
+  "remoteEnv": {
+    "CLINE_WORKSPACE": "/home/agent/workspace",
+    "TERM": "xterm-256color"
+  }
 }

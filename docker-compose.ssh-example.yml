@@ -1,0 +1,54 @@
+# Docker Compose Configuration with SSH Key Support
+# This is an example showing how to enable SSH keys for git operations
+# 
+# Usage:
+#   1. Run: ./scripts/setup-ssh-keys.sh
+#   2. Merge relevant sections into your docker-compose.yml
+#   3. Or use: docker-compose -f docker-compose.yml -f docker-compose.ssh-example.yml up
+
+version: '3.8'
+
+services:
+  # Agent Container with SSH Key Support
+  agent:
+    volumes:
+      # Option 1: Mount SSH keys from local directory (recommended)
+      # First run: ./scripts/setup-ssh-keys.sh
+      - ./ssh-keys:/ssh-keys:ro
+      
+      # Option 2: SSH Agent Forwarding (alternative)
+      # Uncomment if you prefer to use your host's SSH agent
+      # - ${SSH_AUTH_SOCK}:/ssh-agent:ro
+    
+    environment:
+      # Option 2: SSH Agent Forwarding environment variable
+      # Uncomment if using SSH agent forwarding
+      # - SSH_AUTH_SOCK=/ssh-agent
+      
+      # Git configuration for SSH
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=accept-new
+    
+    # Note: The agent/entrypoint.sh will automatically:
+    # - Detect mounted SSH keys in /ssh-keys
+    # - Copy them to ~/.ssh with proper permissions
+    # - Configure git to use SSH for common hosts
+    # - Clean up keys on container exit
+
+# Alternative: Named volume for SSH keys (more secure, memory-backed)
+volumes:
+  cloakcode_ssh_keys:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=10m,uid=1000,gid=1000,mode=0700"
+
+# To use the named volume instead:
+# services:
+#   agent:
+#     volumes:
+#       - cloakcode_ssh_keys:/ssh-keys:ro
+#
+# Then populate the volume before starting:
+#   docker volume create cloakcode_ssh_keys
+#   docker run --rm -v cloakcode_ssh_keys:/target -v ./ssh-keys:/source:ro alpine cp -r /source/. /target/

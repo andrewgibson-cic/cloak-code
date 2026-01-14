@@ -1,20 +1,40 @@
-# Environment files with secrets
+# Security - CRITICAL: Never commit real credentials
 .env
-.env.vault
-.env.local
-.env.*.local
-sidecar.json
+*.pem
+*.key
+*.crt
+proxy/config.yaml
+credentials.yml
 
-# Binaries
-env-sidecar
-*.exe
-*.dll
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 *.so
-*.dylib
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
 
-# Go
-go.work
-go.work.sum
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.npm
 
 # IDE
 .vscode/
@@ -22,14 +42,20 @@ go.work.sum
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Docker
+# Test outputs
+test-results/
+coverage/
 *.log
 
-# Test coverage
-*.out
-coverage.html
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Certificate directories (runtime generated)
+cloakcode_certs/
+
+# SSH keys directory (contains real private keys)
+ssh-keys/

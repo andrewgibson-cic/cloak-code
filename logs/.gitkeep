@@ -1,0 +1,39 @@
+# Logs Directory
+
+This directory contains persistent logs from the CloakCode containers.
+
+## Log Files
+
+- `agent_activity.log` - Agent container activity (npm, git, pip commands)
+- `proxy_injections.log` - Credential injection events from proxy
+- `security_events.log` - Security-related events (blocks, violations)
+- `audit.json` - Structured audit trail in JSON format
+
+## Accessing Logs
+
+```bash
+# View agent activity
+tail -f logs/agent_activity.log
+
+# View proxy injections
+tail -f logs/proxy_injections.log
+
+# View security events
+tail -f logs/security_events.log
+
+# Search for specific events
+grep "npm install" logs/agent_activity.log
+
+# View structured audit log
+cat logs/audit.json | jq
+```
+
+## Log Rotation
+
+Logs are automatically rotated when they exceed 50MB.
+Old logs are compressed and kept for 30 days.
+
+## Persistence
+
+These logs persist across container restarts and removals.
+They are stored on the host filesystem and survive `docker-compose down`.
