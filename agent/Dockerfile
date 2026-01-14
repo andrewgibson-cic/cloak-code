@@ -1,7 +1,7 @@
 # Universal Injector Agent Container
 # Provides an isolated, recoverable environment for AI CLI tools with credential injection
 
-FROM node:20-bookworm
+FROM node:25-bookworm
 
 # Set environment variables for non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive
