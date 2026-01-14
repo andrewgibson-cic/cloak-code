@@ -24,5 +24,5 @@ sphinx==7.2.6
 sphinx-rtd-theme==2.0.0
 
 # Type Checking
-types-PyYAML==6.0.12.12
+types-PyYAML==6.0.12.20250915
 types-requests==2.31.0.10
