@@ -17,7 +17,7 @@ mypy==1.7.1
 
 # Mocking and Testing Utilities
 responses==0.24.1
-freezegun==1.4.0
+freezegun==1.5.5
 
 # Documentation
 sphinx==7.2.6
