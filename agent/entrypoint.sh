@@ -19,10 +19,26 @@ install_certificate() {
     local cert_file="/certs/mitmproxy-ca-cert.pem"
     local cert_dest="/usr/local/share/ca-certificates/mitmproxy-ca-cert.crt"
     local cert_pem="/usr/local/share/ca-certificates/mitmproxy-ca-cert.pem"
-    local timeout=30
+    local timeout=60
     local elapsed=0
     
     echo "Waiting for proxy certificate..."
+    
+    # Check if we're in a CI/test environment (no proxy container)
+    if ! getent hosts proxy > /dev/null 2>&1; then
+        echo "ℹ  Proxy container not found in DNS"
+        echo "  Skipping certificate installation (likely CI environment)"
+        echo "  Container will run without proxy certificate"
+        return 0
+    fi
+    
+    # Check if proxy port is reachable
+    if ! timeout 10 bash -c 'cat < /dev/null > /dev/tcp/proxy/8080' 2>/dev/null; then
+        echo "⚠️  WARNING: Proxy container not reachable on port 8080"
+        echo "  Skipping certificate installation"
+        echo "  This is expected in CI environments or standalone mode"
+        return 0
+    fi
     
     # Wait for certificate file to exist
     while [ ! -f "$cert_file" ]; do
@@ -66,6 +82,12 @@ install_certificate() {
 # Verify proxy connectivity
 verify_proxy() {
     echo "Verifying proxy connectivity..."
+    
+    # Check if proxy host exists
+    if ! getent hosts proxy > /dev/null 2>&1; then
+        echo "ℹ  Proxy not configured (standalone mode)"
+        return 0
+    fi
     
     # Check if proxy port is reachable (without making a proxied request)
     # Using nc (netcat) to just check if the port is open
