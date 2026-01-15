@@ -19,13 +19,13 @@ RUN pip install --no-cache-dir \
 RUN mkdir -p /app/strategies
 
 # Copy strategy modules first (required by inject.py)
-COPY proxy/strategies/ /app/strategies/
+COPY strategies/ /app/strategies/
 
 # Copy the main injection script
-COPY proxy/inject.py /app/inject.py
+COPY inject.py /app/inject.py
 
 # Copy example configuration
-COPY proxy/config.yaml.example /app/config.yaml.example
+COPY config.yaml.example /app/config.yaml.example
 
 # Make script executable
 RUN chmod +x /app/inject.py
