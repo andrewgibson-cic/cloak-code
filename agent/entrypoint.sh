@@ -148,6 +148,7 @@ setup_ssh_keys() {
         # Generate known_hosts for common git servers
         echo "  Generating known_hosts for git servers..."
         touch "$ssh_dir/known_hosts"
+        ssh-keyscan -H github.ibm.com >> "$ssh_dir/known_hosts" 2>/dev/null || true
         ssh-keyscan -H github.com >> "$ssh_dir/known_hosts" 2>/dev/null || true
         ssh-keyscan -H gitlab.com >> "$ssh_dir/known_hosts" 2>/dev/null || true
         ssh-keyscan -H bitbucket.org >> "$ssh_dir/known_hosts" 2>/dev/null || true
