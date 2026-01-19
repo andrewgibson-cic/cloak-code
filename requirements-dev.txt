@@ -25,4 +25,4 @@ sphinx-rtd-theme==2.0.0
 
 # Type Checking
 types-PyYAML==6.0.12.20250915
-types-requests==2.31.0.10
+types-requests==2.32.4.20260107
