@@ -16,7 +16,7 @@ flake8==7.0.0
 mypy==1.7.1
 
 # Mocking and Testing Utilities
-responses==0.24.1
+responses==0.25.8
 freezegun==1.5.5
 
 # Documentation
