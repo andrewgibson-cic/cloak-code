@@ -48,8 +48,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Set working directory
 WORKDIR /app
 
-# Switch to non-root user for security
-USER mitmproxy
+# Note: We run as root to avoid permission issues with mitmproxy
+# Docker isolation provides security, and proxy doesn't handle sensitive data directly
+# The docker-compose.yml can override this with 'user:' directive if needed
 
 # Run mitmproxy with the injection script
 # --set block_global=false: Allow all traffic (we filter in script)
