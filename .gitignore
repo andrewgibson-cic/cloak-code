@@ -62,3 +62,9 @@ ssh-keys/
 
 # Workspace directory (user workspace for development)
 workspace/
+
+# Documentation (except README and QUICK_START)
+# Keep these committed: README.md, QUICK_START.md
+docs/*.md
+!docs/README.md
+!docs/QUICK_START.md

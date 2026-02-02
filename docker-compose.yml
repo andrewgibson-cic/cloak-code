@@ -78,6 +78,11 @@ services:
       - ./logs:/home/agent/logs:rw
       # Logging utilities
       - ./agent/logging_utils.sh:/usr/local/bin/logging_utils.sh:ro
+      # SSH Agent forwarding for git operations
+      - ${SSH_AUTH_SOCK}:/ssh-agent:ro
+      # Persistent aider venv and scripts
+      - cloakcode_aider_venv:/home/agent/aider-venv
+      - cloakcode_agent_scripts:/home/agent/scripts
     environment:
       # Explicit proxy mode
       HTTP_PROXY: "http://proxy:8080"
@@ -98,6 +103,9 @@ services:
       AWS_ACCESS_KEY_ID: "AKIA00000000DUMMYKEY"
       AWS_SECRET_ACCESS_KEY: "DUMMY_AWS_SECRET_KEY"
       AWS_DEFAULT_REGION: "us-east-1"
+      
+      # SSH Agent socket for git authentication
+      SSH_AUTH_SOCK: "/ssh-agent"
     depends_on:
       proxy:
         condition: service_healthy
@@ -136,4 +144,8 @@ volumes:
   cloakcode_agent_auth:
     driver: local
   cloakcode_certs:
+    driver: local
+  cloakcode_aider_venv:
+    driver: local
+  cloakcode_agent_scripts:
     driver: local

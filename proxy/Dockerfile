@@ -30,8 +30,9 @@ COPY config.yaml.example /app/config.yaml.example
 # Make script executable
 RUN chmod +x /app/inject.py
 
-# Create directory for certificates (shared with agent)
-RUN mkdir -p /certs
+# Create directory for certificates (shared with agent) and set proper ownership
+RUN mkdir -p /certs && \
+    chown -R mitmproxy:mitmproxy /certs
 
 # Expose proxy port
 EXPOSE 8080

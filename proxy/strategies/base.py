@@ -88,8 +88,21 @@ class InjectionStrategy(ABC):
             
             # Wildcard subdomain match (*.example.com)
             if allowed_lower.startswith("*."):
-                domain = allowed_lower[2:]
-                if host.endswith(domain) or host == domain[1:] if domain.startswith(".") else host == domain:
+                # Remove the *. prefix to get base domain
+                base_domain = allowed_lower[2:]
+                
+                # Match if:
+                # 1. Host ends with .base_domain (e.g., api.example.com matches *.example.com)
+                # 2. Host equals base_domain (e.g., example.com matches *.example.com)
+                if host.endswith("." + base_domain) or host == base_domain:
+                    return True
+            
+            # Plain domain match also matches subdomains
+            # e.g., "slack.com" in allowed list matches "api.slack.com"
+            elif not allowed_lower.startswith("*."):
+                # Exact match already checked above
+                # Check if host is a subdomain of allowed
+                if host.endswith("." + allowed_lower):
                     return True
         
         self.logger.warning(

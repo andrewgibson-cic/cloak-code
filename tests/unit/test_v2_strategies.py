@@ -577,6 +577,15 @@ class TestAWSSigV4Strategy(unittest.TestCase):
 class TestHostValidation(unittest.TestCase):
     """Test host validation in base strategy."""
     
+    def setUp(self):
+        """Set up test environment."""
+        os.environ['TEST_TOKEN'] = 'test-token-for-validation'
+    
+    def tearDown(self):
+        """Clean up environment."""
+        if 'TEST_TOKEN' in os.environ:
+            del os.environ['TEST_TOKEN']
+    
     def test_exact_host_match(self):
         """Test exact host matching."""
         config = {
@@ -650,7 +659,7 @@ class TestCredentialLoading(unittest.TestCase):
     
     def test_load_from_env_var_reference(self):
         """Test loading credential from environment variable reference."""
-        config = {'token': 'MY_TOKEN'}
+        config = {'token': 'MY_TOKEN', 'allowed_hosts': ['test.com']}
         strategy = BearerStrategy('test', config)
         
         self.assertEqual(strategy.token, 'secret-value-123')

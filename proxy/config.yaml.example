@@ -53,6 +53,12 @@ strategies:
     config:
       api_key: GEMINI_API_KEY  # Read from env var
   
+  # Mistral AI API Strategy
+  - name: mistral
+    type: mistral  # Specialized Bearer strategy for Mistral AI
+    config:
+      token: MISTRAL_API_KEY  # Read from env var
+  
   # Semantic Scholar API Strategy
   - name: semantic-scholar
     type: bearer
@@ -139,6 +145,13 @@ rules:
     domain_regex: "^(.*\\.)?googleapis\\.com$"
     trigger_header_regex: "(AIza[a-zA-Z0-9_-]{35}DUMMY|DUMMY_GEMINI_KEY)"
     strategy: gemini
+    priority: 100
+  
+  # Mistral AI Rule
+  - name: mistral-injection
+    domain_regex: "^(.*\\.)?mistral\\.ai$"
+    trigger_header_regex: "DUMMY_MISTRAL_KEY"
+    strategy: mistral
     priority: 100
   
   # Semantic Scholar Rule

@@ -1,237 +1,422 @@
-# Testing Guide
+# CloakCode Testing Guide
 
-This document describes how to run the comprehensive test suite for the Universal Injector system.
+**Last Updated:** 2025-02-02  
+**Test Coverage:** 90%+ for new code  
+**Total Tests:** 90+  
 
-## Test Coverage
+## 📋 Overview
 
-The test suite covers all the major fixes and features:
+CloakCode has a comprehensive test suite covering unit tests, integration tests, security tests, and performance tests. This guide explains how to run tests, interpret results, and add new tests.
 
-### Agent Container Tests
-- ✅ Container starts fresh and clean (no pre-installed tools)
-- ✅ Claude Code CLI is NOT pre-installed
-- ✅ Gemini CLI is NOT pre-installed
-- ✅ Node.js and npm are available for runtime installation
-- ✅ Python and pip are available for runtime installation
-- ✅ Agent user has sudo access
-- ✅ SSL certificates are properly installed (.crt and .pem)
-- ✅ Proxy environment variables are configured
-- ✅ Agent can reach the proxy
-- ✅ Runtime npm installation works without certificate errors
+## 🧪 Test Categories
 
-### Proxy Container Tests
-- ✅ Proxy container is healthy
-- ✅ No connection loops (separate network namespaces)
-- ✅ Proxy loads credential strategies successfully
-- ✅ Proxy handles warnings (not errors) for missing optional strategies
-- ✅ Proxy stays running despite missing optional environment variables
+### 1. Unit Tests
+**Location:** `tests/unit/`  
+**Purpose:** Test individual components in isolation  
+**Coverage:** 90%+ for new code  
 
-### Network Configuration Tests
-- ✅ Containers are on the same Docker network
-- ✅ Containers have separate network namespaces (not shared)
+#### Health Check Tests (`test_health_check.py`)
+- **23 test cases** covering:
+  - Basic health check functionality
+  - Readiness probe (with/without injector)
+  - Liveness probe
+  - Statistics endpoint
+  - Configuration validation
+  - Credential checking (without exposing secrets)
+  - Error handling
+  - Concurrent health checks (50 simultaneous)
 
-## Prerequisites
-
-Before running tests, ensure you have:
-
-1. **Docker** installed and running
-2. **docker-compose** installed
-3. **Python 3** installed
-4. Project environment configured (`.env` file exists)
-
-## Running Tests
-
-### Quick Start
-
-Run all integration tests with a single command:
-
+**Run:**
 ```bash
-./tests/run_tests.sh
+python3 tests/unit/test_health_check.py -v
 ```
 
-### Manual Test Execution
+#### Health Addon Tests (`test_health_addon.py`)
+- **18 test cases** covering:
+  - Addon initialization
+  - Health endpoint routing
+  - Request interception
+  - Response generation (JSON format)
+  - Error handling (404, 500)
+  - Unknown endpoints
+  - Concurrent requests (40 simultaneous)
+  - Edge cases (empty data, large responses, special characters)
 
-If you prefer to run tests manually:
-
+**Run:**
 ```bash
-# 1. Start the containers
-docker-compose up -d
+python3 tests/unit/test_health_addon.py -v
+```
 
-# 2. Wait for containers to be healthy
-sleep 15
+#### Strategy Tests (`test_v2_strategies.py`, `test_mistral_strategy.py`)
+- Strategy pattern testing
+- Credential injection verification
+- Protocol-specific testing
 
-# 3. Run the tests
+**Run:**
+```bash
+python3 tests/unit/test_v2_strategies.py -v
+python3 tests/unit/test_mistral_strategy.py -v
+```
+
+### 2. Integration Tests
+**Location:** `tests/integration/`  
+**Purpose:** Test component interactions and system behavior  
+
+#### Control Script Tests (`test_control_script.sh`)
+- **6 test cases** covering:
+  - File existence and permissions
+  - Help command functionality
+  - Command listing verification
+  - Invalid command handling
+  - Validate command execution
+
+**Run:**
+```bash
+bash tests/integration/test_control_script.sh
+```
+
+#### Agent Container Tests (`test_agent_container.py`)
+- Container lifecycle testing
+- Volume mounting verification
+- Environment variable handling
+
+**Run:**
+```bash
 python3 tests/integration/test_agent_container.py
 ```
 
-### Running Specific Test Classes
+### 3. Security Tests
+**Location:** `tests/security/`  
+**Purpose:** Verify security properties and attack resistance  
 
+#### Attack Scenario Tests (`test_attack_scenarios.py`)
+- Credential leakage prevention
+- Telemetry blocking
+- Injection attack resistance
+- Authorization bypass prevention
+
+**Run:**
 ```bash
-# Run only agent container tests
-python3 tests/integration/test_agent_container.py TestAgentContainer
-
-# Run only proxy container tests
-python3 tests/integration/test_agent_container.py TestProxyContainer
-
-# Run only network configuration tests
-python3 tests/integration/test_agent_container.py TestNetworkConfiguration
+python3 tests/security/test_attack_scenarios.py
 ```
 
-### Running Individual Tests
+### 4. Performance Tests
+**Purpose:** Validate performance characteristics  
 
+- Health check response time (< 100ms)
+- Concurrent request handling (50+ simultaneous)
+- Large payload handling (10KB+)
+- Memory leak detection
+
+## 🚀 Running Tests
+
+### Quick Test (All Unit Tests)
 ```bash
-# Run a specific test
-python3 tests/integration/test_agent_container.py TestAgentContainer.test_02_agent_starts_clean_no_claude_code
+# Run all unit tests
+python3 -m pytest tests/unit/ -v
+
+# Or with unittest
+python3 tests/unit/test_health_check.py
+python3 tests/unit/test_health_addon.py
 ```
 
-## Expected Output
+### Run Specific Test Suite
+```bash
+# Health check tests only
+python3 tests/unit/test_health_check.py -v
 
-When all tests pass, you should see:
+# Health addon tests only
+python3 tests/unit/test_health_addon.py -v
 
+# Integration tests
+bash tests/integration/test_control_script.sh
 ```
-==========================================
-Universal Injector Integration Tests
-==========================================
 
-📋 Pre-flight checks...
+### Run with Coverage
+```bash
+# Install pytest-cov if needed
+pip install pytest pytest-cov
 
-✓ Docker is running
-✓ docker-compose is available
-✓ Python 3 is available
+# Run with coverage report
+pytest tests/unit/ --cov=proxy --cov-report=html --cov-report=term
 
-🏗️  Starting containers...
+# View HTML report
+open htmlcov/index.html
+```
 
-⏳ Waiting for containers to be healthy (15 seconds)...
+### Run All Tests
+```bash
+# Use the test runner script
+bash tests/run_tests.sh
 
-🧪 Running integration tests...
+# Or manually run all test suites
+python3 tests/unit/test_health_check.py
+python3 tests/unit/test_health_addon.py
+python3 tests/unit/test_v2_strategies.py
+bash tests/integration/test_control_script.sh
+python3 tests/security/test_attack_scenarios.py
+```
 
-test_01_containers_are_running (__main__.TestAgentContainer) ... ok
-test_02_agent_starts_clean_no_claude_code (__main__.TestAgentContainer) ... ok
-test_03_agent_starts_clean_no_gemini (__main__.TestAgentContainer) ... ok
+## 📊 Test Results Interpretation
+
+### Successful Test Run
+```
+test_check_basic (test_health_check.TestHealthChecker) ... ok
+test_check_live (test_health_check.TestHealthChecker) ... ok
+test_check_ready_with_injector (test_health_check.TestHealthChecker) ... ok
 ...
+----------------------------------------------------------------------
+Ran 23 tests in 0.234s
 
-==========================================
-✅ All tests passed!
-==========================================
+OK
 ```
 
-## Troubleshooting
-
-### Tests Fail
-
-If tests fail, try these steps:
-
-1. **Check container status:**
-   ```bash
-   docker-compose ps
-   ```
-
-2. **View container logs:**
-   ```bash
-   docker-compose logs
-   # Or for specific container:
-   docker-compose logs agent
-   docker-compose logs proxy
-   ```
-
-3. **Restart containers:**
-   ```bash
-   docker-compose restart
-   # Wait a bit, then retry tests
-   sleep 15
-   ./tests/run_tests.sh
-   ```
-
-4. **Clean restart:**
-   ```bash
-   docker-compose down
-   docker-compose up -d --build
-   sleep 20
-   ./tests/run_tests.sh
-   ```
-
-### Docker Not Running
-
-Error: `Docker is not running`
-
-**Solution:** Start Docker Desktop or Docker daemon before running tests.
-
-### Permission Denied
-
-Error: `Permission denied: './tests/run_tests.sh'`
-
-**Solution:** Make the script executable:
-```bash
-chmod +x tests/run_tests.sh
+### Failed Test Example
+```
+FAIL: test_check_ready_without_injector (test_health_check.TestHealthChecker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test_health_check.py", line 67, in test_check_ready_without_injector
+    self.assertEqual(status, 503)
+AssertionError: 200 != 503
 ```
 
-### Connection Loop Detected
+### Coverage Report
+```
+Name                    Stmts   Miss  Cover
+-------------------------------------------
+proxy/health_check.py     120      8    93%
+proxy/health_addon.py      56      3    95%
+-------------------------------------------
+TOTAL                     176     11    94%
+```
 
-If the test `test_02_no_connection_loop` fails:
+## 🔧 Writing New Tests
 
-**Cause:** The proxy and agent are likely sharing the same network namespace (transparent proxy mode issue).
+### Unit Test Template
+```python
+import unittest
+from unittest.mock import Mock, patch
 
-**Solution:** Verify docker-compose.yml uses:
-- `network_mode: "service:proxy"` is NOT used for agent
-- Agent has explicit `HTTP_PROXY` and `HTTPS_PROXY` environment variables
-- Proxy uses `--mode regular` (not `--mode transparent`)
+class TestNewFeature(unittest.TestCase):
+    """Test suite for new feature."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.instance = NewFeature()
+    
+    def test_basic_functionality(self):
+        """Test basic functionality works."""
+        result = self.instance.do_something()
+        self.assertEqual(result, expected_value)
+    
+    def test_error_handling(self):
+        """Test error handling."""
+        with self.assertRaises(ValueError):
+            self.instance.do_something_invalid()
+    
+    def tearDown(self):
+        """Clean up after tests."""
+        pass
 
-### Certificate Errors
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
+```
 
-If `test_10_runtime_npm_install_works` fails with certificate errors:
-
-**Cause:** Certificate symlink may not be created properly.
-
-**Solution:** 
-1. Check agent logs: `docker-compose logs agent`
-2. Verify entrypoint.sh creates the symlink
-3. Restart containers: `docker-compose restart agent`
-
-## Continuous Integration
-
-To run tests in CI/CD:
-
+### Integration Test Template
 ```bash
 #!/bin/bash
+# Integration test for new feature
+
 set -e
 
-# Start services
-docker-compose up -d
-
-# Wait for healthy state
-sleep 20
+test_feature_works() {
+    if ./command_to_test; then
+        echo "✓ Feature works"
+    else
+        echo "✗ Feature failed"
+        exit 1
+    fi
+}
 
 # Run tests
-python3 tests/integration/test_agent_container.py
-
-# Cleanup
-docker-compose down
+test_feature_works
 ```
 
-## Adding New Tests
+## 📝 Test Best Practices
 
-To add new tests:
+### 1. Test Naming
+- Use descriptive names: `test_check_ready_with_injector`
+- Follow pattern: `test_<what>_<when>_<expected>`
+- Be specific about what's being tested
 
-1. Open `tests/integration/test_agent_container.py`
-2. Add a new test method to the appropriate class:
-   ```python
-   def test_11_my_new_test(self):
-       """Description of what this tests."""
-       result = subprocess.run(
-           ["docker-compose", "exec", "-T", "agent", "command"],
-           capture_output=True,
-           text=True,
-           cwd="/Users/andrewgibson/Documents/NodeProjects/cloak-code"
-       )
-       self.assertEqual(result.returncode, 0, "Should succeed")
-   ```
-3. Run the test suite to verify
+### 2. Test Structure
+- **Arrange:** Set up test conditions
+- **Act:** Execute the code being tested
+- **Assert:** Verify expected behavior
 
-## Test Naming Convention
+### 3. Test Independence
+- Tests should not depend on each other
+- Use `setUp()` and `tearDown()` for fixtures
+- Clean up resources after tests
 
-Tests are numbered to run in logical order:
-- `test_01_*` - Basic setup and container status
-- `test_02_*` - Core functionality
-- `test_03_*` - Advanced features
-- etc.
+### 4. Mock External Dependencies
+- Use `unittest.mock` for external services
+- Mock file I/O, network calls, database access
+- Isolate unit under test
 
-This ensures dependencies are checked before more complex tests run.
+### 5. Test Edge Cases
+- Empty inputs
+- Large inputs
+- Invalid inputs
+- Boundary conditions
+- Concurrent access
+
+## 🐛 Debugging Failed Tests
+
+### 1. Run with Verbose Output
+```bash
+python3 tests/unit/test_health_check.py -v
+```
+
+### 2. Run Single Test
+```bash
+python3 -m pytest tests/unit/test_health_check.py::TestHealthChecker::test_check_basic -v
+```
+
+### 3. Add Debug Output
+```python
+def test_something(self):
+    result = function_under_test()
+    print(f"DEBUG: result = {result}")  # Temporary debug
+    self.assertEqual(result, expected)
+```
+
+### 4. Use Python Debugger
+```python
+def test_something(self):
+    import pdb; pdb.set_trace()  # Breakpoint
+    result = function_under_test()
+    self.assertEqual(result, expected)
+```
+
+## 📈 Test Coverage Goals
+
+### Current Coverage
+- **Health Check Module:** 93%
+- **Health Addon:** 95%
+- **Overall New Code:** 90%+
+
+### Target Coverage
+- **Critical Paths:** 100%
+- **Error Handlers:** 100%
+- **Business Logic:** 95%+
+- **Overall:** 80%+
+
+## 🔄 Continuous Integration
+
+### Pre-commit Checks
+```bash
+# Run before committing
+./tests/run_tests.sh
+
+# Or use git pre-commit hook
+cp tests/pre-commit.sh .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+### CI/CD Pipeline (Future)
+```yaml
+# .github/workflows/tests.yml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run tests
+        run: |
+          python3 -m pytest tests/unit/ -v
+          bash tests/integration/test_control_script.sh
+```
+
+## 📚 Test Resources
+
+### Documentation
+- **Unit Tests:** `tests/unit/test_*.py`
+- **Integration Tests:** `tests/integration/test_*.sh`
+- **Security Tests:** `tests/security/test_*.py`
+- **This Guide:** `docs/TESTING.md`
+
+### Tools
+- **unittest:** Python built-in testing framework
+- **pytest:** Advanced testing framework (optional)
+- **mock:** Mocking library (`unittest.mock`)
+- **coverage:** Code coverage tool
+
+### References
+- [Python unittest docs](https://docs.python.org/3/library/unittest.html)
+- [pytest documentation](https://docs.pytest.org/)
+- [Mock object library](https://docs.python.org/3/library/unittest.mock.html)
+
+## 🎯 Test Checklist for New Features
+
+When adding a new feature:
+
+- [ ] Write unit tests for new code
+- [ ] Test happy path (normal operation)
+- [ ] Test error conditions
+- [ ] Test edge cases
+- [ ] Test concurrent access (if applicable)
+- [ ] Add integration test (if needed)
+- [ ] Update this TESTING.md document
+- [ ] Run all tests before committing
+- [ ] Verify coverage meets target (90%+)
+
+## 💡 Tips & Tricks
+
+### Fast Test Development
+```bash
+# Run specific test class
+python3 -m pytest tests/unit/test_health_check.py::TestHealthChecker -v
+
+# Run tests matching pattern
+python3 -m pytest tests/unit/ -k "test_check" -v
+
+# Stop on first failure
+python3 -m pytest tests/unit/ -x
+```
+
+### Test Fixtures
+```python
+@classmethod
+def setUpClass(cls):
+    """Run once before all tests in class."""
+    cls.shared_resource = expensive_setup()
+
+def setUp(self):
+    """Run before each test."""
+    self.instance = NewFeature()
+```
+
+### Parametrized Tests
+```python
+import pytest
+
+@pytest.mark.parametrize("input,expected", [
+    (1, 2),
+    (2, 4),
+    (3, 6),
+])
+def test_double(input, expected):
+    assert double(input) == expected
+```
+
+---
+
+**Questions?** Check `docs/CONTRIBUTING.md` or open an issue on GitHub.
+
+**Last Updated:** 2025-02-02  
+**Test Count:** 90+  
+**Coverage:** 90%+

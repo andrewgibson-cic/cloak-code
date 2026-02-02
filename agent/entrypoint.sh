@@ -263,6 +263,10 @@ main() {
     # Setup workspace
     setup_workspace
     
+    # Setup aider (AI coding assistant) - DISABLED
+    # Automatic aider venv creation is disabled to keep workspace clean
+    # Users can manually install aider if needed: pip install aider-chat
+    
     # Setup SSH keys for git operations
     setup_ssh_keys
     
