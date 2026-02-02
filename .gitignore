@@ -68,3 +68,4 @@ workspace/
 docs/*.md
 !docs/README.md
 !docs/QUICK_START.md
+.env.agent

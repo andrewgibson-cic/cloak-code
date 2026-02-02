@@ -79,4 +79,42 @@ class InjectionStrategy(ABC):
         """
         Validate that the request destination matches allowed hosts.
         
-        This is a critical security check to prevent credential ex
+        This is a critical security check to prevent credential exfiltration.
+        
+        Args:
+            flow: The mitmproxy flow object
+            allowed_hosts: List of allowed host patterns
+            
+        Returns:
+            True if host is allowed, False otherwise
+        """
+        if not allowed_hosts:
+            return False
+        
+        host = flow.request.pretty_host.lower()
+        
+        for allowed in allowed_hosts:
+            allowed_lower = allowed.lower()
+            
+            # Exact match
+            if host == allowed_lower:
+                return True
+            
+            # Wildcard subdomain match (*.example.com)
+            if allowed_lower.startswith('*.'):
+                base_domain = allowed_lower[2:]
+                if host.endswith('.' + base_domain) or host == base_domain:
+                    return True
+            
+            # Subdomain match
+            elif host.endswith('.' + allowed_lower):
+                return True
+        
+        self.logger.warning(
+            f"Host validation failed for {host}. Not in allowed list."
+        )
+        return False
+    
+    def get_credential(self, key: str) -> Optional[str]:
+        """Get credential from configuration."""
+        return self.config.get(key)

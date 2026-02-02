@@ -224,4 +224,9 @@ class EnhancedInjectionStrategy(ABC):
         Raises:
             ValueError: If credential is required but not found
         """
-        value =
+        value = self.config.get(key)
+        
+        if value is None and required:
+            raise ValueError(f"Required credential '{key}' not found in configuration")
+        
+        return value

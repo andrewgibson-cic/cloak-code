@@ -1,296 +1,213 @@
-# CloakCode Makefile
-# Simple, universal commands for managing CloakCode
+# CloakCode Makefile - Fixed and Enhanced
 
-.PHONY: help start stop restart status logs clean shell test build install
+.PHONY: help install test clean docker-build docker-up docker-down docker-logs check-python start stop restart status logs
 
-# Default target - show help
-help:
-	@echo "╔══════════════════════════════════════════════════════════╗"
-	@echo "║         CloakCode Control Commands                       ║"
-	@echo "╚══════════════════════════════════════════════════════════╝"
-	@echo ""
-	@echo "🚀 Setup & Control:"
-	@echo "  make install        - Install dependencies (first time)"
-	@echo "  make start          - Start all services"
-	@echo "  make stop           - Stop all services"
-	@echo "  make restart        - Restart all services"
-	@echo "  make status         - Show service status"
-	@echo ""
-	@echo "🔍 Access Containers:"
-	@echo "  make shell          - Open shell in agent container"
-	@echo "  make shell-agent    - Open bash shell in agent"
-	@echo "  make shell-proxy    - Open shell in proxy"
-	@echo ""
-	@echo "📋 Logs & Debugging:"
-	@echo "  make logs           - Follow all logs"
-	@echo "  make logs-proxy     - Follow proxy logs only"
-	@echo "  make logs-agent     - Follow agent logs only"
-	@echo "  make logs-file      - View persistent file logs"
-	@echo ""
-	@echo "🧪 Testing:"
-	@echo "  make test           - Run all tests"
-	@echo "  make test-unit      - Run unit tests only"
-	@echo "  make test-security  - Run security tests only"
-	@echo "  make test-integration - Run integration tests"
-	@echo "  make test-startup   - Run startup verification tests"
-	@echo "  make test-coverage  - Run tests with coverage report"
-	@echo "  make test-html      - Generate HTML coverage report"
-	@echo "  make test-fast      - Run tests in parallel (quick)"
-	@echo ""
-	@echo "🔧 Code Quality:"
-	@echo "  make lint           - Run linters (pylint, flake8)"
-	@echo "  make format         - Format code with black"
-	@echo "  make format-check   - Check code formatting"
-	@echo "  make type-check     - Run mypy type checking"
-	@echo "  make security-scan  - Run security scanners"
-	@echo ""
-	@echo "🛠️  Maintenance:"
-	@echo "  make build          - Rebuild all containers"
-	@echo "  make clean          - Remove generated files"
-	@echo "  make clean-all      - Remove everything (containers + volumes)"
-	@echo "  make update         - Update dependencies"
-	@echo ""
-	@echo "📖 Documentation:"
-	@echo "  README.md           - Main documentation"
-	@echo "  QUICK_START.md      - Quick start guide"
-	@echo "  docs/TESTING.md     - Testing guide"
-	@echo ""
-	@echo "💡 Common Workflows:"
-	@echo "  First time:    make install && make start"
-	@echo "  Run tests:     make test"
-	@echo "  Quick restart: make restart"
-	@echo "  View coverage: make test-html"
-	@echo ""
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 
-# ============================================================================
-# Setup & Installation
-# ============================================================================
+check-python: ## Check Python version compatibility
+	@echo "Checking Python version compatibility..."
+	@python3 --version | grep -q "Python 3.14" && \
+		(echo "⚠️  WARNING: Python 3.14 detected. This version is not compatible with cffi/mitmproxy." && \
+		 echo "   Please use Python 3.12 or 3.13 instead." && \
+		 echo "   See docs/PYTHON_COMPATIBILITY.md for solutions." && \
+		 exit 1) || \
+		(echo "✅ Python version is compatible" && python3 --version)
 
-install:
-	@echo "📦 Installing development dependencies..."
-	@if [ ! -d "venv" ]; then \
-		echo "Creating virtual environment..."; \
-		python3 -m venv venv; \
-	fi
-	@echo "Installing packages..."
-	@. venv/bin/activate && pip install --upgrade pip && pip install -r requirements-dev.txt
+install: check-python ## Install Python dependencies (requires Python 3.12 or 3.13)
+	@echo "Installing CloakCode dependencies..."
+	pip install --upgrade pip setuptools wheel
+	pip install -r requirements-dev.txt
 	@echo "✅ Installation complete!"
 	@echo ""
-	@echo "Next steps:"
-	@echo "  1. Configure credentials: cp .env.template .env"
-	@echo "  2. Edit .env with your credentials"
-	@echo "  3. Start services: make start"
+	@echo "To verify installation:"
+	@echo "  python -c 'import mitmproxy; print(mitmproxy.__version__)'"
 
-install-prod:
-	@echo "📦 Installing production dependencies only..."
-	@cd proxy && pip install -r requirements.txt
-	@echo "✅ Production dependencies installed"
+install-force: ## Force install without Python version check (may fail on 3.14)
+	@echo "⚠️  Forcing installation without version check..."
+	pip install --upgrade pip setuptools wheel
+	pip install -r requirements-dev.txt
 
-# ============================================================================
-# Docker Control
-# ============================================================================
-
-start:
-	@echo "🚀 Starting CloakCode services..."
-	@if [ -f "./cloakcode" ]; then \
-		./cloakcode start; \
+test: ## Run all tests (automatically uses venv if available)
+	@if [ -d "venv/bin" ]; then \
+		echo "Running tests in virtual environment..."; \
+		./venv/bin/pytest tests/ -v --cov=proxy --cov-report=term-missing; \
 	else \
-		docker-compose up -d; \
-		echo "✅ Services started"; \
-		echo "View logs: make logs"; \
+		echo "Running tests with system Python..."; \
+		pytest tests/ -v --cov=proxy --cov-report=term-missing; \
 	fi
 
-stop:
-	@echo "🛑 Stopping CloakCode services..."
-	@if [ -f "./cloakcode" ]; then \
-		./cloakcode stop; \
+test-unit: ## Run unit tests only
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/pytest tests/unit/ -v; \
 	else \
-		docker-compose down; \
-		echo "✅ Services stopped"; \
+		pytest tests/unit/ -v; \
 	fi
 
-restart:
-	@echo "🔄 Restarting CloakCode services..."
-	@if [ -f "./cloakcode" ]; then \
-		./cloakcode restart; \
+test-integration: ## Run integration tests only
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/pytest tests/integration/ -v; \
 	else \
-		docker-compose restart; \
-		echo "✅ Services restarted"; \
+		pytest tests/integration/ -v; \
 	fi
 
-status:
-	@echo "📊 Service Status:"
-	@if [ -f "./cloakcode" ]; then \
-		./cloakcode status; \
+test-security: ## Run security tests only
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/pytest tests/security/ -v; \
 	else \
-		docker-compose ps; \
+		pytest tests/security/ -v; \
 	fi
 
-build:
-	@echo "🔨 Rebuilding containers..."
-	@docker-compose build --no-cache
-	@echo "✅ Build complete"
+clean: ## Clean up Python cache and build artifacts
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".coverage" -exec rm -rf {} + 2>/dev/null || true
+	rm -rf dist/ build/ 2>/dev/null || true
 
-# ============================================================================
-# Container Access
-# ============================================================================
+docker-build: ## Build Docker containers
+	@echo "Building Docker containers..."
+	docker-compose build
 
-shell: shell-agent
-
-shell-agent:
-	@echo "🐚 Opening shell in agent container..."
-	@docker-compose exec agent /bin/bash
-
-shell-proxy:
-	@echo "🐚 Opening shell in proxy container..."
-	@docker-compose exec proxy /bin/bash
-
-# ============================================================================
-# Logs
-# ============================================================================
-
-logs:
-	@echo "📋 Following all logs (Ctrl+C to exit)..."
-	@docker-compose logs -f
-
-logs-proxy:
-	@echo "📋 Following proxy logs (Ctrl+C to exit)..."
-	@docker-compose logs -f proxy
-
-logs-agent:
-	@echo "📋 Following agent logs (Ctrl+C to exit)..."
-	@docker-compose logs -f agent
-
-logs-file:
-	@echo "📋 Viewing persistent file logs..."
+docker-up: ## Start Docker containers (detached)
+	@echo "Generating dummy .env for agent container..."
+	@./scripts/generate-dummy-env.sh .env .env.agent
+	@echo "Starting Docker containers..."
+	docker-compose up -d
+	@sleep 3
 	@echo ""
-	@echo "=== Recent Agent Activity ==="
-	@tail -n 20 logs/agent_activity.log 2>/dev/null || echo "No agent activity log found"
+	@docker-compose ps
 	@echo ""
-	@echo "=== Recent Proxy Injections ==="
-	@tail -n 20 logs/proxy_injections.log 2>/dev/null || echo "No proxy injection log found"
+	@echo "✅ Containers started!"
+	@echo "View logs: make docker-logs or make logs"
+	@echo "Check status: make status"
+
+docker-down: ## Stop and remove Docker containers
+	@echo "Stopping Docker containers..."
+	docker-compose down
+
+docker-logs: ## Show Docker container logs (follow mode)
+	docker-compose logs -f
+
+docker-clean: ## Remove all Docker containers, images, and volumes
+	@echo "⚠️  This will remove all containers, images, and volumes!"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		docker-compose down -v --remove-orphans; \
+		docker system prune -f; \
+		echo "✅ Docker cleaned!"; \
+	else \
+		echo "Cancelled."; \
+	fi
+
+# Convenience aliases
+start: docker-up ## Alias for docker-up (start containers)
+
+stop: docker-down ## Alias for docker-down (stop containers)
+
+restart: ## Restart Docker containers
+	@echo "Restarting Docker containers..."
+	@make docker-down
+	@sleep 2
+	@make docker-up
+
+status: ## Show status of Docker containers
+	@echo "Docker Container Status:"
+	@docker-compose ps
 	@echo ""
-	@echo "=== Recent Security Events ==="
-	@tail -n 10 logs/security_events.log 2>/dev/null || echo "No security events"
+	@echo "To view logs: make logs"
 
-# ============================================================================
-# Testing
-# ============================================================================
+logs: docker-logs ## Alias for docker-logs (view logs)
 
-test:
-	@echo "🧪 Running all tests..."
-	@. venv/bin/activate && pytest tests/ -v
+logs-proxy: ## Show only proxy container logs
+	docker-compose logs -f proxy
 
-test-unit:
-	@echo "🧪 Running unit tests..."
-	@. venv/bin/activate && pytest tests/unit/ -v -m unit
+logs-agent: ## Show only agent container logs
+	docker-compose logs -f agent
 
-test-security:
-	@echo "🔒 Running security tests..."
-	@. venv/bin/activate && pytest tests/security/ -v -m security
+shell: ## Open shell in agent container (default)
+	docker-compose exec agent /bin/bash
 
-test-integration:
-	@echo "🔗 Running integration tests..."
-	@. venv/bin/activate && pytest tests/integration/ -v -m integration
+shell-proxy: ## Open shell in proxy container
+	docker-compose exec proxy /bin/sh
 
-test-startup:
-	@echo "🚀 Running startup verification tests..."
-	@bash tests/startup/run_startup_tests.sh
+shell-agent: ## Open shell in agent container (alias for 'shell')
+	docker-compose exec agent /bin/bash
 
-test-fast:
-	@echo "⚡ Running tests in parallel..."
-	@. venv/bin/activate && pytest tests/ -n auto -v
+lint: ## Run code linters
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/black --check proxy/ tests/; \
+		./venv/bin/pylint proxy/ tests/ || true; \
+	else \
+		black --check proxy/ tests/; \
+		pylint proxy/ tests/ || true; \
+	fi
 
-test-coverage:
-	@echo "📊 Running tests with coverage..."
-	@. venv/bin/activate && pytest tests/ --cov=proxy --cov-report=term-missing
+format: ## Format code with black
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/black proxy/ tests/; \
+	else \
+		black proxy/ tests/; \
+	fi
 
-test-html:
-	@echo "📊 Generating HTML coverage report..."
-	@. venv/bin/activate && pytest tests/ --cov=proxy --cov-report=html
-	@echo "✅ Coverage report generated!"
-	@echo "   Open: htmlcov/index.html"
+security-scan: ## Run security scans
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/bandit -r proxy/ -ll; \
+		./venv/bin/safety check --json || true; \
+	else \
+		bandit -r proxy/ -ll; \
+		safety check --json || true; \
+	fi
 
-test-watch:
-	@echo "👀 Running tests in watch mode..."
-	@. venv/bin/activate && pytest-watch tests/ -v
-
-# ============================================================================
-# Code Quality
-# ============================================================================
-
-lint:
-	@echo "🔍 Running linters..."
+setup-venv: ## Create a virtual environment with Python 3.12
+	@echo "Creating virtual environment with Python 3.12..."
+	@which python3.12 >/dev/null 2>&1 || (echo "❌ Python 3.12 not found. Install with: brew install python@3.12" && exit 1)
+	python3.12 -m venv venv
+	@echo "✅ Virtual environment created!"
 	@echo ""
-	@echo "=== Pylint ==="
-	@. venv/bin/activate && pylint proxy/ --rcfile=.pylintrc 2>/dev/null || true
+	@echo "Activate with:"
+	@echo "  source venv/bin/activate"
 	@echo ""
-	@echo "=== Flake8 ==="
-	@. venv/bin/activate && flake8 proxy/ tests/ --max-line-length=100 2>/dev/null || true
+	@echo "Then run:"
+	@echo "  make install"
+
+verify: ## Verify installation and configuration
+	@echo "Verifying CloakCode installation..."
 	@echo ""
-	@echo "✅ Linting complete"
-
-format:
-	@echo "✨ Formatting code..."
-	@. venv/bin/activate && black proxy/ tests/ --line-length=100
-	@. venv/bin/activate && isort proxy/ tests/
-	@echo "✅ Code formatted"
-
-format-check:
-	@echo "🔍 Checking code format..."
-	@. venv/bin/activate && black proxy/ tests/ --check --line-length=100
-	@. venv/bin/activate && isort proxy/ tests/ --check-only
-
-type-check:
-	@echo "🔍 Running type checks..."
-	@. venv/bin/activate && mypy proxy/ --ignore-missing-imports
-	@echo "✅ Type checking complete"
-
-security-scan:
-	@echo "🔒 Running security scanners..."
+	@echo "1. Checking Python packages..."
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/python -c "import mitmproxy; import sys; print('✅ mitmproxy installed'); sys.exit(0)" 2>&1 || (echo "❌ mitmproxy not installed" && exit 1); \
+	else \
+		python3 -c "import mitmproxy; import sys; print('✅ mitmproxy installed'); sys.exit(0)" 2>&1 || (echo "❌ mitmproxy not installed" && exit 1); \
+	fi
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/python -c "import yaml; print('✅ PyYAML installed')" 2>&1 || echo "❌ PyYAML not installed"; \
+	else \
+		python3 -c "import yaml; print('✅ PyYAML installed')" 2>&1 || echo "❌ PyYAML not installed"; \
+	fi
+	@if [ -d "venv/bin" ]; then \
+		./venv/bin/python -c "import pytest; print('✅ pytest installed')" 2>&1 || echo "❌ pytest not installed"; \
+	else \
+		python3 -c "import pytest; print('✅ pytest installed')" 2>&1 || echo "❌ pytest not installed"; \
+	fi
 	@echo ""
-	@echo "=== Bandit (Security Issues) ==="
-	@. venv/bin/activate && bandit -r proxy/ -ll 2>/dev/null || true
+	@echo "2. Checking configuration files..."
+	@test -f .env && echo "✅ .env exists" || echo "❌ .env missing (copy from .env.template)"
+	@test -f proxy/config.yaml && echo "✅ proxy/config.yaml exists" || echo "❌ proxy/config.yaml missing"
+	@test -f credentials.yml && echo "✅ credentials.yml exists" || echo "❌ credentials.yml missing"
 	@echo ""
-	@echo "=== Safety (Dependencies) ==="
-	@. venv/bin/activate && safety check 2>/dev/null || true
+	@echo "3. Checking Docker..."
+	@docker --version >/dev/null 2>&1 && echo "✅ Docker installed" || echo "❌ Docker not found"
+	@docker-compose --version >/dev/null 2>&1 && echo "✅ docker-compose installed" || echo "❌ docker-compose not found"
 	@echo ""
-	@echo "✅ Security scan complete"
+	@echo "4. Checking logs directory..."
+	@test -d logs && echo "✅ logs/ directory exists" || echo "❌ logs/ directory missing"
+	@echo ""
+	@echo "Run 'make start' to start CloakCode containers"
 
-# ============================================================================
-# Maintenance
-# ============================================================================
-
-clean:
-	@echo "🧹 Cleaning generated files..."
-	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@find . -type f -name "*.pyo" -delete 2>/dev/null || true
-	@find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	@rm -rf htmlcov/ .pytest_cache/ .coverage coverage.xml 2>/dev/null || true
-	@echo "✅ Cleanup complete"
-
-clean-all: clean
-	@echo "🧹 Deep cleaning (containers + volumes)..."
-	@docker-compose down -v 2>/dev/null || true
-	@rm -rf venv/ .mypy_cache/ .tox/ dist/ build/ 2>/dev/null || true
-	@echo "✅ Deep cleanup complete"
-
-update:
-	@echo "📦 Updating dependencies..."
-	@. venv/bin/activate && pip install --upgrade pip
-	@. venv/bin/activate && pip install --upgrade -r requirements-dev.txt
-	@echo "✅ Dependencies updated"
-
-# ============================================================================
-# Quick Commands
-# ============================================================================
-
-quick-test:
-	@. venv/bin/activate && pytest tests/ -x -q
-
-quick-status:
-	@echo "Tests: $$(. venv/bin/activate && pytest tests/ -q --co | wc -l) total"
-	@echo "Containers: $$(docker-compose ps -q | wc -l) running"
-
-# ============================================================================
+.DEFAULT_GOAL := help

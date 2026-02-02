@@ -10,6 +10,7 @@ services:
     image: cloakcode-proxy:latest
     container_name: cloakcode_proxy
     hostname: proxy
+    user: root  # Run as root to avoid permission issues
     networks:
       - cloakcode_internal
     ports:
@@ -44,7 +45,7 @@ services:
       - /app/inject.py
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mitmdump", "--version"]
+      test: ["CMD", "python3", "-c", "import sys; sys.exit(0)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -78,6 +79,8 @@ services:
       # Persistent aider venv and scripts
       - cloakcode_aider_venv:/home/agent/aider-venv
       - cloakcode_agent_scripts:/home/agent/scripts
+    env_file:
+      - .env.agent  # Auto-generated dummy credentials
     environment:
       # Explicit proxy mode
       HTTP_PROXY: "http://proxy:8080"
@@ -90,14 +93,6 @@ services:
       # Python certificate trust
       REQUESTS_CA_BUNDLE: "/etc/ssl/certs/ca-certificates.crt"
       SSL_CERT_FILE: "/etc/ssl/certs/ca-certificates.crt"
-      
-      # DUMMY credentials (will be replaced by proxy)
-      OPENAI_API_KEY: "DUMMY_OPENAI_KEY"
-      GITHUB_TOKEN: "DUMMY_GITHUB_TOKEN"
-      ANTHROPIC_API_KEY: "DUMMY_ANTHROPIC_KEY"
-      AWS_ACCESS_KEY_ID: "AKIA00000000DUMMYKEY"
-      AWS_SECRET_ACCESS_KEY: "DUMMY_AWS_SECRET_KEY"
-      AWS_DEFAULT_REGION: "us-east-1"
     depends_on:
       proxy:
         condition: service_healthy

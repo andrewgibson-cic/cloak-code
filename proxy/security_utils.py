@@ -45,9 +45,9 @@ class CredentialScrubber:
         return scrubbed
     
     @classmethod
-    def scrub_dict(cls,  Dict[str, Any], scrub_keys: List[str] = None) -> Dict[str, Any]:
+    def scrub_dict(cls, data: Dict[str, Any], scrub_keys: List[str] = None) -> Dict[str, Any]:
         """Scrub credentials from dictionary values."""
-        if not 
+        if not data:
             return data
         
         scrub_keys = scrub_keys or []

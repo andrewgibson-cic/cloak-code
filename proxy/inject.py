@@ -119,3 +119,6 @@ class UniversalInjector:
         self.injection_log = self.log_dir / "proxy_injections.log"
         self.security_log = self.log_dir / "security_events.log"
         self.audit_log = self.log_dir / "audit.json"
+
+# Backward compatibility alias for v1 tests
+CredentialInjector = UniversalInjector
