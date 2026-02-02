@@ -19,7 +19,7 @@ mypy==1.7.1
 
 # Security Testing
 bandit==1.7.5  # Security issue scanner
-safety==2.3.5  # Dependency vulnerability scanner
+safety==3.0.0  # Dependency vulnerability scanner
 
 # Performance Testing
 locust==2.20.0  # Load testing
