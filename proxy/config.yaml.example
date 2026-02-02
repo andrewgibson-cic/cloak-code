@@ -59,6 +59,58 @@ strategies:
     config:
       token: MISTRAL_API_KEY  # Read from env var
   
+  # Git PAT Strategy for GitHub
+  - name: git-github
+    type: git_pat
+    config:
+      providers:
+        github.com:
+          env_var: GIT_GITHUB_PAT
+          dummy_pattern: 'ghp_[a-zA-Z0-9]{36}DUMMY'
+          username: 'git'
+      allowed_hosts:
+        - "github.com"
+        - "*.github.com"
+  
+  # Git PAT Strategy for GitLab
+  - name: git-gitlab
+    type: git_pat
+    config:
+      providers:
+        gitlab.com:
+          env_var: GIT_GITLAB_PAT
+          dummy_pattern: 'glpat-[a-zA-Z0-9_-]{20}DUMMY'
+          username: 'oauth2'
+      allowed_hosts:
+        - "gitlab.com"
+        - "*.gitlab.com"
+  
+  # Git PAT Strategy for Bitbucket
+  - name: git-bitbucket
+    type: git_pat
+    config:
+      providers:
+        bitbucket.org:
+          env_var: GIT_BITBUCKET_PAT
+          dummy_pattern: 'DUMMY_BITBUCKET_[A-Z0-9]{20}'
+          username: 'x-token-auth'
+      allowed_hosts:
+        - "bitbucket.org"
+        - "*.bitbucket.org"
+  
+  # Git PAT Strategy for Azure DevOps
+  - name: git-azure
+    type: git_pat
+    config:
+      providers:
+        dev.azure.com:
+          env_var: GIT_AZURE_PAT
+          dummy_pattern: 'DUMMY_AZURE_[a-zA-Z0-9]{52}'
+          username: 'user'
+      allowed_hosts:
+        - "dev.azure.com"
+        - "*.visualstudio.com"
+  
   # Semantic Scholar API Strategy
   - name: semantic-scholar
     type: bearer
@@ -173,6 +225,31 @@ rules:
     domain_regex: "^(.*\\.)?slack\\.com$"
     trigger_header_regex: "xapp-DUMMY"
     strategy: slack-app
+    priority: 100
+  
+  # Git PAT Rules
+  - name: git-github-injection
+    domain_regex: "^(.*\\.)?github\\.com$"
+    trigger_header_regex: "(ghp_[a-zA-Z0-9]{36}DUMMY|DUMMY)"
+    strategy: git-github
+    priority: 100
+  
+  - name: git-gitlab-injection
+    domain_regex: "^(.*\\.)?gitlab\\.com$"
+    trigger_header_regex: "(glpat-[a-zA-Z0-9_-]{20}DUMMY|DUMMY)"
+    strategy: git-gitlab
+    priority: 100
+  
+  - name: git-bitbucket-injection
+    domain_regex: "^(.*\\.)?bitbucket\\.org$"
+    trigger_header_regex: "DUMMY"
+    strategy: git-bitbucket
+    priority: 100
+  
+  - name: git-azure-injection
+    domain_regex: "^(dev\\.azure\\.com|.*\\.visualstudio\\.com)$"
+    trigger_header_regex: "DUMMY"
+    strategy: git-azure
     priority: 100
 
 # Global Settings
