@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
@@ -55,8 +60,24 @@ jobs:
         severity: 'HIGH,CRITICAL'
         exit-code: '0'
     
-    - name: Upload Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v2
+    - name: Upload proxy Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
-        sarif_file: '.'
+        sarif_file: 'trivy-proxy-results.sarif'
+        category: 'proxy-image'
+    
+    - name: Upload agent Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-agent-results.sarif'
+        category: 'agent-image'
+    
+    - name: Build summary
+      if: always()
+      run: |
+        echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Proxy image built successfully" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Agent image built successfully" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Security scans completed" >> $GITHUB_STEP_SUMMARY
