@@ -1,0 +1,53 @@
+# Security-focused Makefile targets for CloakCode
+# Add these targets to your existing Makefile
+
+.PHONY: security-scan security-scan-config security-scan-images security-scan-deps security-fix security-report
+
+# Run complete security scan
+security-scan: security-scan-config security-scan-deps security-scan-images
+
+# Scan Dockerfiles and configurations for misconfigurations
+security-scan-config:
+	@echo "🔍 Scanning configurations for security issues..."
+	docker run --rm -v "$(PWD):/scan" aquasec/trivy:latest config \
+		--severity HIGH,CRITICAL \
+		--exit-code 0 \
+		/scan
+
+# Scan filesystem for dependency vulnerabilities
+security-scan-deps:
+	@echo "🔍 Scanning dependencies for vulnerabilities..."
+	docker run --rm -v "$(PWD):/scan" aquasec/trivy:latest fs \
+		--severity HIGH,CRITICAL \
+		--scanners vuln \
+		--exit-code 0 \
+		/scan
+
+# Scan Docker images for vulnerabilities
+security-scan-images:
+	@echo "🔍 Scanning mitmproxy base image..."
+	docker run --rm aquasec/trivy:latest image \
+		--severity HIGH,CRITICAL \
+		--exit-code 0 \
+		mitmproxy/mitmproxy:latest
+	@echo "🔍 Scanning node base image..."
+	docker run --rm aquasec/trivy:latest image \
+		--severity HIGH,CRITICAL \
+		--exit-code 0 \
+		node:25-bookworm-slim
+	@echo "🔍 Scanning built images (if they exist)..."
+	-docker run --rm aquasec/trivy:latest image \
+		--severity HIGH,CRITICAL \
+		--exit-code 0 \
+		cloakcode-proxy:latest 2>/dev/null || echo "⚠️  cloakcode-proxy:latest not built yet"
+	-docker run --rm aquasec/trivy:latest image \
+		--severity HIGH,CRITICAL \
+		--exit-code 0 \
+		cloakcode-agent:latest 2>/dev/null || echo "⚠️  cloakcode-agent:latest not built yet"
+
+# Apply security fixes by using hardened Dockerfiles
+security-fix:
+	@echo "🔒 Applying security fixes..."
+	@if [ -f proxy/Dockerfile.secure ]; then \
+		echo "  → Backing up proxy/Dockerfile to proxy/Dockerfile.backup"; \
+		cp
