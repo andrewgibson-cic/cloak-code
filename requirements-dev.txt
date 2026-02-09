@@ -2,7 +2,7 @@
 # Python 3.12 or 3.13 recommended (3.14 has compatibility issues with cffi)
 
 # Core proxy dependencies
-mitmproxy>=10.1.0,<11.0.0
+mitmproxy>=10.1.0,<13.0.0
 pyyaml>=6.0,<7.0
 requests>=2.31.0,<3.0.0
 cryptography>=41.0.0,<43.0.0
