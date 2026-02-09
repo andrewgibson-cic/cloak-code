@@ -61,14 +61,14 @@ jobs:
         exit-code: '0'
     
     - name: Upload proxy Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: 'trivy-proxy-results.sarif'
         category: 'proxy-image'
     
     - name: Upload agent Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: 'trivy-agent-results.sarif'
