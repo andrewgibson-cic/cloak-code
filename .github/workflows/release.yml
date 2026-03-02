@@ -248,7 +248,7 @@ jobs:
           docker save cloakcode-agent:${{ needs.determine-version.outputs.new_version }} | gzip > /tmp/images/agent.tar.gz
 
       - name: Upload Docker images
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: docker-images
           path: /tmp/images/
